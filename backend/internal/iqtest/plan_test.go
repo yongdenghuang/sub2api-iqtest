@@ -96,3 +96,39 @@ func TestComputeNextCronTimezone(t *testing.T) {
 		t.Fatalf("expected error for bad cron")
 	}
 }
+
+func TestNormalizeRejectsUnsafeScopeAndCron(t *testing.T) {
+	for _, id := range []int64{0, -1} {
+		for _, scope := range []ScopeType{ScopeAccounts, ScopeGroups} {
+			p := validPlan()
+			p.ScopeType, p.AccountIDs, p.GroupIDs = scope, []int64{id}, []int64{id}
+			if err := p.Normalize(); err == nil {
+				t.Errorf("accepted %s ID %d", scope, id)
+			}
+		}
+	}
+	for _, expr := range []string{"@every 1s", "@daily", "CRON_TZ=UTC 0 3 * * *", "0 0 3 * * *"} {
+		p := validPlan()
+		p.ScheduleType, p.CronExpr = ScheduleCron, expr
+		if err := p.Normalize(); err == nil {
+			t.Errorf("accepted %q", expr)
+		}
+	}
+}
+
+func TestComputeNextImpossibleCron(t *testing.T) {
+	p := validPlan()
+	p.ScheduleType, p.CronExpr = ScheduleCron, "0 0 31 2 *"
+	if _, err := p.ComputeNext(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.UTC); err == nil {
+		t.Fatal("February 31 must not produce a zero next-run timestamp")
+	}
+}
+
+func TestComputeNextLeapDay(t *testing.T) {
+	p := validPlan()
+	p.ScheduleType, p.CronExpr = ScheduleCron, "0 0 29 2 *"
+	next, err := p.ComputeNext(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.UTC)
+	if err != nil || next.Year() != 2028 || next.Month() != time.February || next.Day() != 29 {
+		t.Fatalf("valid leap-day schedule: next=%v err=%v", next, err)
+	}
+}

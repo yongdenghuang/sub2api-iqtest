@@ -2,6 +2,7 @@ package iqtest
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math/rand"
 	"sort"
@@ -98,6 +99,12 @@ func (e *Engine) ResolveAccounts(ctx context.Context, p *Plan) ([]*service.Accou
 
 	switch p.ScopeType {
 	case ScopeAccounts:
+		if len(p.AccountIDs) == 0 {
+			return nil, fmt.Errorf("account_ids is required")
+		}
+		if err := validateScopeIDs(p.AccountIDs, "account_ids"); err != nil {
+			return nil, err
+		}
 		list, err := e.accounts.GetAccountsByIDs(ctx, p.AccountIDs)
 		if err != nil {
 			return nil, err
@@ -106,15 +113,23 @@ func (e *Engine) ResolveAccounts(ctx context.Context, p *Plan) ([]*service.Accou
 			add(a)
 		}
 	case ScopeGroups:
+		if len(p.GroupIDs) == 0 {
+			return nil, fmt.Errorf("group_ids is required")
+		}
+		if err := validateScopeIDs(p.GroupIDs, "group_ids"); err != nil {
+			return nil, err
+		}
 		for _, gid := range p.GroupIDs {
 			if err := e.listAll(ctx, gid, add); err != nil {
 				return nil, err
 			}
 		}
-	default:
+	case ScopeAll:
 		if err := e.listAll(ctx, 0, add); err != nil {
 			return nil, err
 		}
+	default:
+		return nil, fmt.Errorf("unknown scope_type %q", p.ScopeType)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil

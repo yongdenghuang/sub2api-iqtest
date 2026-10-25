@@ -106,7 +106,7 @@ func (p *Plan) Normalize() error {
 	switch p.ScheduleType {
 	case ScheduleCron:
 		p.CronExpr = strings.TrimSpace(p.CronExpr)
-		if _, err := cron.ParseStandard(p.CronExpr); err != nil {
+		if _, err := parsePlanCron(p.CronExpr); err != nil {
 			return fmt.Errorf("invalid cron expression: %w", err)
 		}
 		p.IntervalMinutes = 0
@@ -128,6 +128,9 @@ func (p *Plan) Normalize() error {
 		if len(p.GroupIDs) == 0 {
 			return errors.New("group_ids is required for scope_type=groups")
 		}
+		if err := validateScopeIDs(p.GroupIDs, "group_ids"); err != nil {
+			return err
+		}
 		p.AccountIDs = nil
 	case ScopeAccounts:
 		if len(p.AccountIDs) == 0 {
@@ -135,6 +138,9 @@ func (p *Plan) Normalize() error {
 		}
 		if len(p.AccountIDs) > maxScopeAccounts {
 			return fmt.Errorf("too many accounts (max %d)", maxScopeAccounts)
+		}
+		if err := validateScopeIDs(p.AccountIDs, "account_ids"); err != nil {
+			return err
 		}
 		p.GroupIDs = nil
 	case ScopeAll, "":
@@ -172,11 +178,15 @@ func (p *Plan) ComputeNext(from time.Time, loc *time.Location) (time.Time, error
 		loc = time.Local
 	}
 	if p.ScheduleType == ScheduleCron {
-		sched, err := cron.ParseStandard(p.CronExpr)
+		sched, err := parsePlanCron(p.CronExpr)
 		if err != nil {
 			return time.Time{}, err
 		}
-		return sched.Next(from.In(loc)), nil
+		next := sched.Next(from.In(loc))
+		if next.IsZero() {
+			return time.Time{}, errors.New("cron expression has no upcoming run")
+		}
+		return next, nil
 	}
 	if p.IntervalMinutes < 1 {
 		return time.Time{}, errors.New("invalid interval")
@@ -196,4 +206,25 @@ func clampInt(v, def, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+// Do not accept cron descriptors (notably @every 1s) or timezone prefixes:
+// plans use five fields and the server's configured timezone.
+func parsePlanCron(expr string) (cron.Schedule, error) {
+	if len(strings.Fields(expr)) != 5 {
+		return nil, errors.New("cron expression must have five fields")
+	}
+	return cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow).Parse(expr)
+}
+
+func validateScopeIDs(ids []int64, field string) error {
+	if len(ids) > maxScopeAccounts {
+		return fmt.Errorf("too many %s (max %d)", field, maxScopeAccounts)
+	}
+	for _, id := range ids {
+		if id <= 0 {
+			return fmt.Errorf("%s must contain only positive IDs", field)
+		}
+	}
+	return nil
 }

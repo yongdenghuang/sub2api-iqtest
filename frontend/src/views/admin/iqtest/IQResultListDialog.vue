@@ -32,6 +32,14 @@
         </tbody>
       </table>
     </div>
+    <Pagination
+      v-if="pagination && pagination.total > 0"
+      :page="pagination.page"
+      :page-size="pagination.size"
+      :total="pagination.total"
+      :show-page-size-selector="false"
+      @update:page="emit('page', $event)"
+    />
   </BaseDialog>
 
   <!-- Result detail -->
@@ -62,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -70,10 +78,11 @@ import { formatDateTime } from '@/utils/format'
 import iqtestAPI from '@/api/admin/iqtest'
 import type { IQResult } from '@/api/admin/iqtest'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import { outcomeClass, useIQLabels } from './labels'
 
-defineProps<{ show: boolean; title: string; items: IQResult[]; loading: boolean }>()
-const emit = defineEmits<{ close: [] }>()
+const props = defineProps<{ show: boolean; title: string; items: IQResult[]; loading: boolean; pagination?: { page: number; size: number; total: number } | null }>()
+const emit = defineEmits<{ close: []; page: [page: number] }>()
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -81,9 +90,19 @@ const { outcomeLabel, reasonLabel } = useIQLabels()
 
 const detail = ref<IQResult | null>(null)
 
+let detailRequest = 0
+watch(() => props.show, (show) => {
+  if (!show) {
+    detailRequest++
+    detail.value = null
+  }
+})
+
 async function openResult(id: number) {
+  const request = ++detailRequest
   try {
-    detail.value = await iqtestAPI.getResult(id)
+    const result = await iqtestAPI.getResult(id)
+    if (request === detailRequest && props.show) detail.value = result
   } catch (e) {
     appStore.showError(extractApiErrorMessage(e, t('iqtest.common.loadFailed')))
   }

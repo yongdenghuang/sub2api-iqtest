@@ -414,7 +414,7 @@
       </template>
     </BaseDialog>
 
-    <IQResultListDialog :show="showList" :title="listTitle" :items="listItems" :loading="listLoading" @close="showList = false" />
+    <IQResultListDialog :show="showList" :title="listTitle" :items="listItems" :loading="listLoading" :pagination="selectedRunId === null ? null : resultPage" @page="loadRunResults" @close="closeResults" />
 
     <ConfirmDialog
       :show="!!toDelete"
@@ -770,31 +770,58 @@ const listTitle = ref('')
 const listItems = ref<IQResult[]>([])
 const listLoading = ref(false)
 
+const selectedRunId = ref<number | null>(null)
+const resultPage = reactive({ page: 1, size: 50, total: 0 })
+let resultRequest = 0
+
+function closeResults() {
+  resultRequest++
+  showList.value = false
+  selectedRunId.value = null
+}
+
 async function openRun(r: IQRun) {
   listTitle.value = `${t('iqtest.run.detail')} #${r.id}`
-  listItems.value = []
+  selectedRunId.value = r.id
+  resultPage.page = 1
+  resultPage.total = 0
   showList.value = true
+  await loadRunResults(1)
+}
+
+async function loadRunResults(page: number) {
+  const id = selectedRunId.value
+  if (id === null) return
+  const request = ++resultRequest
+  listItems.value = []
   listLoading.value = true
   try {
-    listItems.value = (await iqtestAPI.listRunResults(r.id, 1, 200)).items ?? []
+    const result = await iqtestAPI.listRunResults(id, page, resultPage.size)
+    if (request !== resultRequest) return
+    listItems.value = result.items ?? []
+    resultPage.page = result.page
+    resultPage.total = result.total
   } catch (e) {
-    fail(e)
+    if (request === resultRequest) fail(e)
   } finally {
-    listLoading.value = false
+    if (request === resultRequest) listLoading.value = false
   }
 }
 
 async function openAccountHistory(s: IQStateRow) {
+  selectedRunId.value = null
+  const request = ++resultRequest
   listTitle.value = `${s.account_name} #${s.account_id} · ${t(`iqtest.kind.${s.kind}`)}`
   listItems.value = []
   showList.value = true
   listLoading.value = true
   try {
-    listItems.value = await iqtestAPI.listAccountResults(s.account_id, s.kind, 100)
+    const items = await iqtestAPI.listAccountResults(s.account_id, s.kind, 100)
+    if (request === resultRequest) listItems.value = items
   } catch (e) {
-    fail(e)
+    if (request === resultRequest) fail(e)
   } finally {
-    listLoading.value = false
+    if (request === resultRequest) listLoading.value = false
   }
 }
 

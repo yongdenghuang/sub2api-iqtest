@@ -244,3 +244,21 @@ func TestEnginePlatformFilter(t *testing.T) {
 		t.Fatalf("called %v", called)
 	}
 }
+
+// Persisted legacy plans must not turn an invalid group (0 means all groups
+// to AccountSource) or an unknown scope into a request against the whole pool.
+func TestResolveAccountsRejectsInvalidStoredScope(t *testing.T) {
+	e := NewEngine(newMemRepo(), nil, nil) // a query would panic: validation must happen first
+	for _, p := range []*Plan{
+		{ScopeType: ScopeGroups, GroupIDs: []int64{0}},
+		{ScopeType: ScopeGroups, GroupIDs: []int64{-1}},
+		{ScopeType: ScopeGroups},
+		{ScopeType: ScopeAccounts, AccountIDs: []int64{0}},
+		{ScopeType: ScopeAccounts},
+		{ScopeType: "typo"},
+	} {
+		if _, err := e.ResolveAccounts(context.Background(), p); err == nil {
+			t.Errorf("accepted invalid scope: %+v", p)
+		}
+	}
+}
