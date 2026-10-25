@@ -82,6 +82,10 @@ func (s *Scheduler) launch(ctx context.Context, p *Plan) {
 	var next *time.Time
 	if n, err := p.ComputeNext(now, s.loc); err != nil {
 		slog.Warn("iqtest: cannot compute next run, leaving plan unscheduled", "plan_id", p.ID, "error", err)
+		if saveErr := s.store.SetPlanNextRun(ctx, p.ID, nil); saveErr != nil {
+			slog.Warn("iqtest: clear invalid schedule failed", "plan_id", p.ID, "error", saveErr)
+		}
+		return
 	} else {
 		next = &n
 	}
