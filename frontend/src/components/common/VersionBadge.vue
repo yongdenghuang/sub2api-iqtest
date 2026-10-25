@@ -107,7 +107,7 @@
                 </div>
                 <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
                   {{
-                    hasUpdate
+                    buildType === 'iqtest' ? t('iqtest.updates.managed') : hasUpdate
                       ? t('version.latestVersion') + ': v' + latestVersion
                       : t('version.upToDate')
                   }}
@@ -115,7 +115,11 @@
               </div>
 
               <!-- Priority 1: Update error (must check before hasUpdate) -->
-              <div v-if="updateError" class="space-y-2">
+              <div v-if="buildType === 'iqtest'" class="space-y-2 text-xs text-gray-500 dark:text-dark-400">
+                <p>{{ t('iqtest.updates.hint') }}</p>
+                <a href="https://github.com/yongdenghuang/sub2api-iqtest/actions" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline">{{ t('iqtest.updates.open') }}</a>
+              </div>
+              <div v-else-if="updateError" class="space-y-2">
                 <div
                   class="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800/50 dark:bg-red-900/20"
                 >

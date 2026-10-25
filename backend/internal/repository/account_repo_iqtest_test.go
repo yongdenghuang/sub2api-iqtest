@@ -72,7 +72,7 @@ func TestIQQualityFilterBeforePagination(t *testing.T) {
 func TestIQQualityFilterPostgresParameters(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	ctx, err := iqquality.WithFilter(context.Background(), "quality_fail")
 	require.NoError(t, err)

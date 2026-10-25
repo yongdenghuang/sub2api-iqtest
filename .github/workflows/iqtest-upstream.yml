@@ -1,0 +1,46 @@
+name: IQTest upstream sync
+
+on:
+  schedule:
+    - cron: '31 22 * * *' # Every day at 06:31 Asia/Shanghai
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iqtest-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository == 'yongdenghuang/sub2api-iqtest' && github.ref == 'refs/heads/feature/iqtest'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.merge.outputs.changed }}
+      sha: ${{ steps.merge.outputs.sha }}
+      branch: ${{ steps.merge.outputs.branch }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/iqtest
+          fetch-depth: 0
+      - name: Merge latest official stable release into a candidate branch
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/iqtest/sync-upstream.sh
+
+  release:
+    needs: prepare
+    if: needs.prepare.outputs.changed == 'true'
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/iqtest-release.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+      promote_branch: ${{ needs.prepare.outputs.branch }}
+    secrets: inherit

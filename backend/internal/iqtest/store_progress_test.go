@@ -14,7 +14,7 @@ func TestGetRunLiveProgress(t *testing.T) {
 		t.Run(status, func(t *testing.T) {
 			db, mock, err := sqlmock.New()
 			require.NoError(t, err)
-			defer db.Close()
+			defer func() { _ = db.Close() }()
 			mock.ExpectQuery("SELECT .* FROM iq_runs WHERE id").WithArgs(int64(7)).WillReturnRows(
 				sqlmock.NewRows(strings.Split(runCols, ", ")).AddRow(7, 0, "adhoc", status, time.Now(), nil, 3, 4, 2, 1, 1, 2))
 			if status == "running" {

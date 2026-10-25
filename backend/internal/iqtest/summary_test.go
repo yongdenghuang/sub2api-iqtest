@@ -13,7 +13,7 @@ import (
 func TestAccountSummaryCountsAllActiveRowsOnce(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	db.SetMaxOpenConns(1)
 	_, err = db.Exec(`CREATE TABLE accounts (id INTEGER, deleted_at DATETIME);
  CREATE TABLE iq_account_state (account_id INTEGER, kind TEXT, state TEXT);

@@ -1,0 +1,170 @@
+name: IQTest release and deploy
+
+on:
+  push:
+    branches: [feature/iqtest]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      promote_branch:
+        type: string
+        default: ''
+    secrets:
+      IQTEST_DEPLOY_KEY:
+        required: true
+      IQTEST_KNOWN_HOSTS:
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+# Do not interrupt an in-progress database backup / deployment.
+concurrency:
+  group: iqtest-production-release
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    if: github.repository == 'yongdenghuang/sub2api-iqtest' && github.ref == 'refs/heads/feature/iqtest'
+    uses: ./.github/workflows/backend-ci.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}
+
+  iqtest:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm --dir frontend install --frozen-lockfile
+      - name: Custom account and IQ tests
+        working-directory: frontend
+        run: pnpm exec vitest run src/views/admin/iqtest/__tests__ src/views/admin/__tests__/AccountsView.iqStatus.spec.ts src/components/account/__tests__/AccountTestModal.spec.ts src/components/admin/account/__tests__/ScheduledTestsPanel.results.spec.ts
+      - name: Deployment failure / rollback regression tests
+        run: python3 -m unittest discover -s deploy/iqtest -p 'test_*.py'
+      - name: Build embedded frontend
+        run: pnpm --dir frontend run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: iqtest-frontend-${{ inputs.ref || github.sha }}
+          path: backend/internal/web/dist/
+          retention-days: 3
+
+  image:
+    needs: iqtest
+    runs-on: ubuntu-latest
+    outputs:
+      image: ghcr.io/yongdenghuang/sub2api-iqtest@${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: iqtest-frontend-${{ inputs.ref || github.sha }}
+          path: backend/internal/web/dist/
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Build immutable custom release
+        id: version
+        run: |
+          sha=$(git rev-parse HEAD)
+          base=$(git describe --tags --match 'v[0-9]*' --abbrev=0)
+          version="${base#v}-iqtest.${sha:0:12}"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          mkdir -p .iqtest-image
+          cd backend
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embed -trimpath -ldflags="-s -w -X main.Version=$version -X main.Commit=$sha -X main.BuildType=iqtest" -o ../.iqtest-image/sub2api ./cmd/server
+          cp -R resources ../.iqtest-image/resources
+          cp ../deploy/iqtest/Dockerfile ../.iqtest-image/Dockerfile
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .iqtest-image
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/yongdenghuang/sub2api-iqtest:sha-${{ steps.version.outputs.sha }}
+            ghcr.io/yongdenghuang/sub2api-iqtest:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/yongdenghuang/sub2api-iqtest
+            org.opencontainers.image.revision=${{ steps.version.outputs.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+      - name: Record image digest
+        env:
+          IMAGE: ghcr.io/yongdenghuang/sub2api-iqtest@${{ steps.build.outputs.digest }}
+        run: echo "Tested custom image — $IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+  promote:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+      - name: Promote tested upstream merge or reject an obsolete release
+        env:
+          CANDIDATE_BRANCH: ${{ inputs.promote_branch }}
+        run: |
+          git fetch origin feature/iqtest
+          if [[ -n "$CANDIDATE_BRANCH" ]]; then
+            [[ "$CANDIDATE_BRANCH" == automation/upstream-* ]]
+            git merge-base --is-ancestor origin/feature/iqtest HEAD
+            git push origin HEAD:refs/heads/feature/iqtest
+            git push origin --delete "$CANDIDATE_BRANCH"
+          else
+            test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/iqtest)"
+          fi
+
+  deploy:
+    needs: [image, promote]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Back up and deploy the tested image
+        env:
+          IMAGE: ${{ needs.image.outputs.image }}
+          DEPLOY_KEY: ${{ secrets.IQTEST_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.IQTEST_KNOWN_HOSTS }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          task_ssh=$(mktemp -d)
+          trap 'rm -rf "$task_ssh"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$task_ssh/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$task_ssh/known_hosts"
+          printf '%s' "$REGISTRY_TOKEN" | ssh -i "$task_ssh/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$task_ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=4 root@38.55.111.50 "$IMAGE"
+          curl --fail --silent --show-error --retry 3 https://sapi.yongdh.top/health
+          echo "Deployed $IMAGE to https://sapi.yongdh.top after backup and health checks." >> "$GITHUB_STEP_SUMMARY"

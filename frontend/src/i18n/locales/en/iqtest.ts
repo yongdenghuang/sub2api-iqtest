@@ -1,5 +1,10 @@
 export default {
   iqtest: {
+    updates: {
+      managed: 'Managed IQTest updates',
+      hint: 'Official stable releases are tested, backed up and deployed automatically. Updates stop on failure.',
+      open: 'View update history'
+    },
     overview: {
       total: '{count} accounts in total', quality: '{count} quality issues', request: '{count} request issues',
       note: 'All accounts · Quality flags do not disable accounts',

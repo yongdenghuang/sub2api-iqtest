@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
@@ -21,7 +22,13 @@ func TestApplyAccountTestOverride(t *testing.T) {
 		},
 	}
 	text := func() any {
-		return payload["messages"].([]map[string]any)[0]["content"].([]map[string]any)[0]["text"]
+		messages, ok := payload["messages"].([]map[string]any)
+		require.True(t, ok)
+		require.NotEmpty(t, messages)
+		content, ok := messages[0]["content"].([]map[string]any)
+		require.True(t, ok)
+		require.NotEmpty(t, content)
+		return content[0]["text"]
 	}
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 

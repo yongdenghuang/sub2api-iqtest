@@ -101,7 +101,7 @@ func parseSSE(body string) Capture {
 		}
 		if ev.Type == "content" {
 			if text.Len() < maxCapturedText {
-				text.WriteString(ev.Text)
+				_, _ = text.WriteString(ev.Text)
 			}
 		} else {
 			out.Events = append(out.Events, ev)

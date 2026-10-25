@@ -1,5 +1,10 @@
 export default {
   iqtest: {
+    updates: {
+      managed: '定制版自动更新',
+      hint: '官方正式版通过检查后，自动备份并部署；更新失败时停止。',
+      open: '查看更新记录'
+    },
     overview: {
       total: '全部 {count} 个账号', quality: '{count} 个质量异常', request: '{count} 个请求异常',
       note: '全局统计 · 质量异常只标记，不自动停用',
