@@ -10,7 +10,7 @@
 4. 构建 Linux amd64 定制镜像，发布到 `ghcr.io/yongdenghuang/sub2api-iqtest`。版本含 `-iqtest.<commit>`，使用不可变 digest 部署；不使用官方镜像或浮动 latest。
 5. 只有全部检查通过，才将候选提交快进合入生产分支。若分支已被其他人更新，停止以避免覆盖。
 6. VPS 拉取镜像成功后开启短暂维护页面，停止本项目 app，备份本项目 PostgreSQL 和 data，再切换镜像。数据库、Redis 和其他 VPS 应用不会被更新。
-7. 容器健康检查和管理员只读检查确认智商测试接口、认证、统计、GPT-6 Astra 默认值正常后解除维护。不会为了验证部署实际调用模型。
+7. 容器健康检查、运行版本核对、智商测试接口认证检查和数据库只读查询通过后解除维护；GPT-6 Astra 默认值由发布前的回归测试验证。不会为了验证部署实际调用模型。
 
 直接推送生产分支也会触发同样的检查、镜像构建和自动部署。上游同步内部显式调用可复用工作流，不依赖 `GITHUB_TOKEN` 的 push 再次触发 Actions。
 
@@ -34,7 +34,7 @@ docker compose -f compose.yaml -f compose.iqtest-image.json ps
 
 Actions 的 `IQTEST_DEPLOY_KEY` 是单独生成的 SSH 密钥，服务器授权使用 `restrict` 和固定命令。它仅能把本仓库的 `@sha256:` 镜像交给 root 所有的部署程序，不能执行任意 shell、端口转发或交互登录。`IQTEST_KNOWN_HOSTS` 固定 VPS 主机公钥。
 
-GHCR 拉取使用工作流当前运行的短期 `GITHUB_TOKEN`，通过 SSH 标准输入传递，临时 Docker 登录文件在拉取后删除。无需存储 GitHub 个人令牌或 VPS 登录密码。
+GHCR 拉取使用工作流当前运行的短期 `GITHUB_TOKEN`，通过 SSH 标准输入传递，临时 Docker 登录文件在拉取后删除。无需存储 GitHub 个人令牌、VPS 登录密码或网站管理员密码；管理员改密码 / 开启 MFA 不影响更新。
 
 服务器固定部署程序：`/usr/local/lib/sub2api-iqtest/update.py`；SSH 入口：`/usr/local/sbin/sub2api-iqtest-deploy`。更新此特权程序需要管理员单独安装，应用镜像不能自动替换它。
 

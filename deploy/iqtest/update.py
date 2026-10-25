@@ -45,6 +45,8 @@ class Deployment:
         self.new_started = False
         self.stopped = False
         self.previous_image_id = None
+        self.previous_version = None
+        self.expected_version = None
 
     def compose(self, *args, **kwargs):
         command = ['docker', 'compose', '-f', str(self.root / 'compose.yaml')]
@@ -72,6 +74,11 @@ class Deployment:
             raise RuntimeError('Image source does not match the custom repository')
         if not re.fullmatch('[0-9a-f]{40}', labels.get('org.opencontainers.image.revision', '')):
             raise RuntimeError('Image has no valid source revision')
+        self.next_version = labels.get('org.opencontainers.image.version')
+        if not self.next_version or '-iqtest.' not in self.next_version:
+            raise RuntimeError('Image is not an IQTest version')
+        with urllib.request.urlopen('http://127.0.0.1:8080/api/v1/settings/public', timeout=15) as response:
+            self.previous_version = json.load(response)['data']['version']
         stamp = time.strftime('%Y%m%d-%H%M%S', time.gmtime())
         self.backup = self.root / 'backups' / ('auto-' + stamp)
         self.backup.mkdir(mode=0o700, parents=True)
@@ -96,6 +103,7 @@ class Deployment:
         candidate.write_text(json.dumps({'services': {'app': {'image': image, 'pull_policy': 'never'}}}))
         candidate.replace(self.override)
         self.new_started = True
+        self.expected_version = self.next_version
         self.start()
 
     def start(self):
@@ -106,42 +114,22 @@ class Deployment:
         with urllib.request.urlopen(base + '/health', timeout=15) as response:
             if response.status != 200:
                 raise RuntimeError('Health check failed')
-        env = {}
-        for line in (self.root / '.env').read_text().splitlines():
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                env[key] = value.strip().strip('"').strip("'")
-        token = None
-
-        def request(path, body=None):
-            headers = {'Content-Type': 'application/json'}
-            if token:
-                headers['Authorization'] = 'Bearer ' + token
-            data = None if body is None else json.dumps(body).encode()
-            req = urllib.request.Request(base + '/api/v1' + path, data=data, headers=headers)
-            with urllib.request.urlopen(req, timeout=20) as response:
-                return json.load(response)['data']
-
-        # Also prove the custom endpoints still require authentication.
-        try:
-            request('/admin/iqtest/summary')
-        except urllib.error.HTTPError as error:
-            if error.code != 401:
-                raise RuntimeError('Unexpected IQTest authentication response') from None
-        else:
-            raise RuntimeError('IQTest endpoint is not protected')
-        login = request('/auth/login', {'email': env['ADMIN_EMAIL'], 'password': env['ADMIN_PASSWORD']})
-        token = login['access_token']
-        try:
-            defaults = request('/admin/iqtest/defaults')
-            if defaults['default_model'] != 'gpt-6-astra' or set(defaults['check_kinds']) != {'candy', 'pelican_svg'}:
-                raise RuntimeError('IQTest defaults were lost')
-            summary = request('/admin/iqtest/summary')
-            if summary['total'] != sum(summary[k] for k in ('quality_fail', 'infra_error', 'normal', 'untested')):
-                raise RuntimeError('IQTest summary does not balance')
-            request('/admin/iqtest/plans')
-        finally:
-            request('/auth/logout', {})
+        with urllib.request.urlopen(base + '/api/v1/settings/public', timeout=15) as response:
+            version = json.load(response)['data']['version']
+        if self.expected_version is not None and version != self.expected_version:
+            raise RuntimeError('Running version does not match the tested image')
+        # No bootstrap password or account credential is needed. These probes
+        # remain valid after an administrator changes their password or uses MFA.
+        for path in ('summary', 'defaults', 'plans'):
+            try:
+                urllib.request.urlopen(base + '/api/v1/admin/iqtest/' + path, timeout=15).close()
+            except urllib.error.HTTPError as error:
+                if error.code != 401:
+                    raise RuntimeError('Unexpected IQTest authentication response') from None
+            else:
+                raise RuntimeError('IQTest endpoint is not protected')
+        sql = 'SELECT id, config FROM iq_plans LIMIT 0; SELECT kind, state FROM iq_account_state LIMIT 0; SELECT id, output FROM iq_results LIMIT 0;'
+        self.compose('exec', '-T', 'postgres', 'sh', '-c', 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"', input=sql.encode(), stdout=subprocess.DEVNULL)
 
     def restore(self):
         if self.new_started:
@@ -166,6 +154,7 @@ class Deployment:
         else:
             self.override.write_bytes(self.previous_override)
         if self.stopped:
+            self.expected_version = self.previous_version
             self.start()
             self.verify()
 
