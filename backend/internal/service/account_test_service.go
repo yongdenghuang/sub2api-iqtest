@@ -564,6 +564,7 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create test payload")
 	}
+	ApplyAccountTestOverride(c, payload) // iqtest hook: custom prompt / max_tokens for quality checks
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event
