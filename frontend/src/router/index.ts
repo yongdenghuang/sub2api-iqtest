@@ -526,6 +526,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/iqtest',
+    name: 'AdminIQTest',
+    component: () => import('@/views/admin/iqtest/IQTestView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Account IQ Tests',
+      titleKey: 'iqtest.title',
+      descriptionKey: 'iqtest.description'
+    }
+  },
+  {
     path: '/admin/plugins',
     name: 'AdminPlugins',
     component: () => import('@/views/admin/PluginsView.vue'),
