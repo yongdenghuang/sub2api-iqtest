@@ -45,3 +45,26 @@ HTTPS Nginx 配置通过 `/www/sites/sapi.yongdh.top/iqtest-maintenance` 控制�
 ## 人工处理边界
 
 遇到上游破坏性接口调整、合并冲突、CI 失败或 GitHub 拒绝机器人修改 workflow 文件，需要先修复候选分支再发布。自动流程不会强制覆盖、忽略失败检查或改动账号凭证。
+
+## 第二台 VPS：保留已有账号的原生安装
+
+`192.220.12.234` / `https://api.yongdh.top` 保持原来的 systemd 安装方式。第一个站点部署通过后，工作流将同一个已测试镜像交给第二台服务器；从镜像提取二进制和 resources 更新 `/opt/sub2api`。不会重建数据库容器或 Redis，也不会将第一个站点的账号覆盖到第二个站点。
+
+- 服务：`sub2api.service`，端口 `127.0.0.1:8081`（Nginx 转发目标）。显式使用 `/opt/sub2api/config.yaml`，保留原配置与签名密钥。
+- 实际数据库：`sub2api-postgres` 容器内的 **`sub2api_v2`**，应用角色也是 `sub2api_v2`。Compose 默认的 `sub2api` 是空库，不能用它备份或恢复。
+- 更新程序：`/usr/local/lib/sub2api-iqtest/native_update.py`，依赖同目录 `update.py`。固定 SSH 入口仍为 `/usr/local/sbin/sub2api-iqtest-deploy`。
+- 独立的受限部署密钥：`IQTEST_VPS192_DEPLOY_KEY`；固定主机公钥：`IQTEST_VPS192_KNOWN_HOSTS`。不能执行任意 SSH 命令。
+- 状态与备份：`/opt/sub2api-iqtest-migration/`，自动备份 `backups/native-*` 保留最近三份；首次迁移的 `backups/preflight-*` 另行保留。备份包含实际数据库、旧二进制、配置和 data/resources。
+- Nginx 维护标记：`/etc/nginx/iqtest-api.yongdh.top-maintenance`。失败锁：`/opt/sub2api-iqtest-migration/UPDATE_BLOCKED`。
+
+新版先在维护状态下启动，并用临时 systemd 配置关闭 OAuth 令牌自动刷新。健康、版本、IQ 接口认证和数据库检查通过后，逐项核对账号凭据、用户密码、余额、API Key 与签名密钥，再移除临时配置恢复正常启动。验证阶段失败可以恢复旧数据库和二进制；**恢复正常令牌刷新之后若启动失败，则保留当前数据与维护状态并停止更新**，避免回退到已被轮换失效的 refresh token。此时应排查启动问题，不能盲目恢复旧数据库。
+
+首次迁移前已在隔离数据库、独立 Redis 和禁止外网访问的容器中验证兼容性。原站点来自不同分支，保留了它额外的数据库表；这些表不代表定制版保留原分支所有 UI 功能。已有 8 个 OpenAI OAuth 账号、1 个管理员、1 个 API Key 和 6 个分组均保留。
+
+查看运行状态：
+
+```sh
+systemctl status sub2api --no-pager
+cat /opt/sub2api-iqtest-migration/current-release.json
+curl --fail https://api.yongdh.top/health
+```
