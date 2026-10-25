@@ -892,6 +892,14 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		upstreamTestModelID = normalizeOpenAIModelForUpstream(credentialAccount, testModelID)
 	}
 	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth)
+	// Quality checks pass their question through the prompt argument. Keep the
+	// ordinary connectivity probe unchanged when no custom prompt is supplied.
+	if strings.TrimSpace(prompt) != "" {
+		payload["input"] = []map[string]any{{
+			"role":    "user",
+			"content": []map[string]any{{"type": "input_text", "text": prompt}},
+		}}
+	}
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event once. A task-invalid Agent Identity response may

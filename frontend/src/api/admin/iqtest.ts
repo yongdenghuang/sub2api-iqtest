@@ -113,7 +113,16 @@ export interface IQEvent {
   created_at: string
 }
 
+export interface IQAccountSummary {
+  total: number
+  quality_fail: number
+  infra_error: number
+  normal: number
+  untested: number
+}
+
 export interface IQDefaults {
+  default_model: string
   candy_prompt: string
   pelican_prompt: string
   policy: IQPolicy
@@ -124,6 +133,9 @@ export interface IQDefaults {
 const base = '/admin/iqtest'
 
 export const iqtestAPI = {
+  async summary(): Promise<IQAccountSummary> {
+    return (await apiClient.get<IQAccountSummary>(`${base}/summary`)).data
+  },
   async defaults(): Promise<IQDefaults> {
     return (await apiClient.get<IQDefaults>(`${base}/defaults`)).data
   },

@@ -283,7 +283,7 @@
               </div>
               <div>
                 <label class="input-label">{{ t('iqtest.plan.model') }}</label>
-                <input v-model="form.checks[k].model" class="input" />
+                <input v-model="form.checks[k].model" class="input" :placeholder="defaults?.default_model || DEFAULT_TEST_MODEL" />
               </div>
               <div>
                 <label class="input-label">{{ t('iqtest.plan.maxTokens') }}</label>
@@ -428,8 +428,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { DEFAULT_TEST_MODEL } from '@/constants/accountTestModel'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -459,7 +461,11 @@ const appStore = useAppStore()
 
 const tabs: Tab[] = ['flagged', 'plans', 'runs', 'events']
 const kinds: IQKind[] = ['candy', 'pelican_svg']
-const tab = ref<Tab>('flagged')
+const route = useRoute()
+const router = useRouter()
+const routeTab = () => tabs.includes(route.query.tab as Tab) ? route.query.tab as Tab : 'flagged'
+const tab = ref<Tab>(routeTab())
+watch(() => route.query.tab, () => { tab.value = routeTab(); void refresh() })
 const loading = ref(false)
 const defaults = ref<IQDefaults | null>(null)
 
@@ -542,8 +548,7 @@ function refresh() {
 }
 
 function setTab(next: Tab) {
-  tab.value = next
-  refresh()
+  void router.replace({ query: { ...route.query, tab: next } })
 }
 
 // ---------- labels ----------
@@ -573,7 +578,7 @@ interface CheckForm {
 const blankCheck = (): CheckForm => ({
   on: false,
   prompt: '',
-  model: '',
+  model: defaults.value?.default_model ?? DEFAULT_TEST_MODEL,
   max_tokens: 0,
   timeout_seconds: 0,
   candy_mode: 'anywhere'
@@ -654,7 +659,7 @@ function openEdit(p: IQPlan) {
     f.checks[c.kind] = {
       on: true,
       prompt: c.prompt ?? '',
-      model: c.model ?? '',
+      model: c.model?.trim() || defaults.value?.default_model || DEFAULT_TEST_MODEL,
       max_tokens: c.max_tokens ?? 0,
       timeout_seconds: c.timeout_seconds ?? 0,
       candy_mode: c.candy_mode === 'final' ? 'final' : 'anywhere'
@@ -814,7 +819,7 @@ onMounted(async () => {
   } catch {
     /* defaults are only placeholders */
   }
-  loadPlans()
-  loadStates(1)
+  void loadPlans()
+  if (tab.value !== 'plans') void refresh()
 })
 </script>

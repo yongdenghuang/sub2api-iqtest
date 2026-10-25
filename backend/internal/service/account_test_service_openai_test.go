@@ -704,3 +704,27 @@ func TestAccountTestService_OpenAIChatCompletionsPathRejectsNonJSONStream(t *tes
 	require.Contains(t, recorder.Body.String(), "/v1/chat/completions")
 	require.NotContains(t, recorder.Body.String(), `"success":true`)
 }
+
+func TestAccountTestService_OpenAIAstraDefaultPreservesQualityPrompt(t *testing.T) {
+	for _, prompt := range []string{"", "糖果题：请给出最少糖果数量。", "Generate an SVG of a pelican riding a bicycle."} {
+		t.Run(prompt, func(t *testing.T) {
+			ctx, _ := newTestContext()
+			resp := newJSONResponse(http.StatusOK, "data: {\"type\":\"response.completed\"}\n\n")
+			upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
+			svc := &AccountTestService{httpUpstream: upstream}
+			account := &Account{ID: 90, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1, Credentials: map[string]any{"access_token": "test-token"}}
+			require.NoError(t, svc.testOpenAIAccountConnection(ctx, account, "", prompt, ""))
+			require.Len(t, upstream.requests, 1)
+			body, err := io.ReadAll(upstream.requests[0].Body)
+			require.NoError(t, err)
+			require.Equal(t, "gpt-6-astra", gjson.GetBytes(body, "model").String())
+			want := prompt
+			if want == "" {
+				want = "hi"
+			}
+			require.Equal(t, want, gjson.GetBytes(body, "input.0.content.0.text").String())
+			require.False(t, gjson.GetBytes(body, "store").Bool())
+			require.False(t, gjson.GetBytes(body, "temperature").Exists())
+		})
+	}
+}

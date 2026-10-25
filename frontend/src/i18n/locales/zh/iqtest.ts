@@ -1,11 +1,26 @@
 export default {
   iqtest: {
+    overview: {
+      total: '全部 {count} 个账号', quality: '{count} 个质量异常', request: '{count} 个请求异常',
+      note: '全局统计 · 质量异常只标记，不自动停用',
+      hint: '按糖果 / 鹈鹕最新结果归类：质量失败优先于请求异常；跳过不作质量结论；不受列表筛选影响。',
+      failed: '统计加载失败'
+    },
+    filter: { all: '全部质量状态', quality_fail: '质量异常', infra_error: '请求异常', normal: '质量正常', untested: '尚未测试 / 已跳过' },
+    batch: {
+      button: '批量智商测试', title: '糖果 + 鹈鹕 SVG 批量测试', running: '智商测试中…', submitting: '正在提交…',
+      progress: '已完成 {done} / {total} 项', hint: '任务在后台执行，刷新页面后可继续查看。每个账号执行两项测试，不可用的账号会记录跳过原因。',
+      submitFailed: '未能确认任务是否已提交，请先查看运行记录，避免重复测试。',
+      progressFailed: '获取进度失败；后台任务不会因此取消。', retryProgress: '刷新进度'
+    },
+
     nav: '智商测试',
     title: '账号智商测试',
     description: '按计划逐账号发送固定题目，标记质量异常的账号（默认只标记，不改账号状态）',
     tabs: { flagged: '异常账号', plans: '测试计划', runs: '运行记录', events: '状态变更' },
     kind: { candy: '糖果题', pelican_svg: '鹈鹕骑自行车 SVG' },
     kindShort: { candy: '糖果', pelican_svg: 'SVG' },
+    intelligence: { title: '智商状态', normal: '正常', degraded: '降智', unknown: '待确认', hint: '依据最近一次糖果测试；请求异常、跳过或未测试时待确认，SVG 结果不影响此列' },
     column: { title: '智商测试', none: '未测试', last: '最近' },
     outcome: { pass: '通过', quality_fail: '质量失败', infra_error: '基础设施错误', skipped: '已跳过' },
     state: { normal: '正常', suspect: '可疑', flagged: '已标记' },
@@ -54,7 +69,7 @@ export default {
       enabledHint: '关闭后只能手动“立即运行”',
       checks: '测试项',
       customPrompt: '自定义题目（留空用默认）',
-      model: '模型（留空用账号默认）',
+      model: '模型（默认 GPT-6 Astra）',
       maxTokens: '最大输出 token',
       timeout: '超时（秒）',
       candyMode: '糖果题判定',
@@ -102,6 +117,11 @@ export default {
       statuses: { running: '运行中', done: '完成', aborted: '中止' }
     },
     result: {
+      viewSvg: '查看 SVG',
+      noSvg: '这次测试没有可预览的完整 SVG，请查看结果原因或模型输出。',
+      svgLoadFailed: '这次 SVG 无法渲染，请展开模型输出查看原文。',
+      loading: '正在加载测试结果…',
+      retry: '重新加载',
       account: '账号',
       kind: '测试项',
       outcome: '结果',

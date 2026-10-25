@@ -114,3 +114,25 @@ func TestCheckEligibility(t *testing.T) {
 		t.Fatalf("service account: %+v", e)
 	}
 }
+
+func TestRunCheckDefaultModel(t *testing.T) {
+	for _, kind := range []TestKind{TestCandy, TestPelicanSVG} {
+		for _, tc := range []struct{ model, want string }{
+			{"", "gpt-6-astra"}, {"  ", "gpt-6-astra"}, {" custom-model ", "custom-model"},
+		} {
+			t.Run(string(kind)+"/"+tc.model, func(t *testing.T) {
+				var got string
+				tester := fakeTester{fn: func(c *gin.Context, _ int64, model, _ string) error {
+					got = model
+					emit(c, service.TestEvent{Type: "content", Text: "21"})
+					emit(c, service.TestEvent{Type: "test_complete", Success: true})
+					return nil
+				}}
+				RunCheck(context.Background(), tester, 7, CheckConfig{Kind: kind, Model: tc.model})
+				if got != tc.want {
+					t.Fatalf("model=%q want=%q", got, tc.want)
+				}
+			})
+		}
+	}
+}

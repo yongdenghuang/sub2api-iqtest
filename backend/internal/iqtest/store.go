@@ -346,6 +346,13 @@ func (s *Store) GetRun(ctx context.Context, id int64) (*Run, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
+	if err == nil && r.Status == "running" {
+		err = s.db.QueryRowContext(ctx, `SELECT
+   COUNT(*) FILTER (WHERE outcome <> 'skipped'), COUNT(*) FILTER (WHERE outcome = 'pass'),
+   COUNT(*) FILTER (WHERE outcome = 'quality_fail'), COUNT(*) FILTER (WHERE outcome = 'infra_error'),
+   COUNT(*) FILTER (WHERE outcome = 'skipped') FROM iq_results WHERE run_id = $1`, id).
+			Scan(&r.Requests, &r.Pass, &r.QualityFail, &r.InfraError, &r.Skipped)
+	}
 	return r, err
 }
 

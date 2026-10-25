@@ -181,6 +181,7 @@ type BulkUpdateAccountsRequest struct {
 }
 
 type BulkUpdateAccountFilters struct {
+	IQQuality   string `json:"iq_quality"`
 	Platform    string `json:"platform"`
 	Type        string `json:"type"`
 	Status      string `json:"status"`
@@ -641,6 +642,9 @@ func (h *AccountHandler) listAccountSchedulerScoreFilterPool(
 // List handles listing all accounts with pagination
 // GET /api/v1/admin/accounts
 func (h *AccountHandler) List(c *gin.Context) {
+	if !applyAccountIQFilter(c) {
+		return
+	}
 	page, pageSize := response.ParsePagination(c)
 	platform := c.Query("platform")
 	accountType := c.Query("type")
@@ -2387,6 +2391,7 @@ func toServiceBulkUpdateAccountFilters(filters *BulkUpdateAccountFilters) *servi
 		return nil
 	}
 	return &service.BulkUpdateAccountFilters{
+		IQQuality:   filters.IQQuality,
 		Platform:    filters.Platform,
 		Type:        filters.Type,
 		Status:      filters.Status,

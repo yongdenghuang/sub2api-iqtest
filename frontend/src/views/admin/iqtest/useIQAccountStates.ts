@@ -12,7 +12,7 @@ const MIN_REFETCH_MS = 30_000
  * Loads the IQ-test states of the accounts currently shown in the account list.
  * Errors are ignored on purpose: the column then just shows "not tested".
  */
-export function useIQAccountStates(rows: () => { id: number }[], enabled: () => boolean) {
+export function useIQAccountStates(rows: () => { id: number }[], enabled: () => boolean, refreshToken: () => number = () => 0) {
   const byAccount = ref<Record<number, IQStateRow[]>>({})
   let seq = 0
   let lastKey = ''
@@ -29,8 +29,8 @@ export function useIQAccountStates(rows: () => { id: number }[], enabled: () => 
   }
 
   watch(
-    () => [rows(), enabled()] as const,
-    ([list, on]) => {
+    () => [rows(), enabled(), refreshToken()] as const,
+    ([list, on, token], previous) => {
       if (!on || !list.length) {
         seq++
         lastKey = ''
@@ -39,7 +39,7 @@ export function useIQAccountStates(rows: () => { id: number }[], enabled: () => 
       }
       const ids = list.map((r) => r.id)
       const key = ids.join(',')
-      if (key === lastKey && Date.now() - lastAt < MIN_REFETCH_MS) return
+      if (token === previous?.[2] && key === lastKey && Date.now() - lastAt < MIN_REFETCH_MS) return
       lastKey = key
       lastAt = Date.now()
       load(ids).catch(() => {})

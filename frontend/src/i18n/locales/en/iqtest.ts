@@ -1,11 +1,26 @@
 export default {
   iqtest: {
+    overview: {
+      total: '{count} accounts in total', quality: '{count} quality issues', request: '{count} request issues',
+      note: 'All accounts · Quality flags do not disable accounts',
+      hint: 'Latest candy / pelican results; quality failures take priority over request errors. Skips provide no quality conclusion. Table filters do not affect these totals.',
+      failed: 'Could not load totals'
+    },
+    filter: { all: 'All quality states', quality_fail: 'Quality issues', infra_error: 'Request issues', normal: 'Quality normal', untested: 'Untested / skipped' },
+    batch: {
+      button: 'Batch IQ test', title: 'Candy + pelican SVG batch test', running: 'IQ tests running…', submitting: 'Submitting…',
+      progress: '{done} / {total} checks completed', hint: 'Runs in the background and survives page refresh. Each account gets both checks; unavailable accounts include a skip reason.',
+      submitFailed: 'Could not confirm submission. Check run history before retrying to avoid duplicate tests.',
+      progressFailed: 'Could not fetch progress. The background run is not cancelled.', retryProgress: 'Refresh progress'
+    },
+
     nav: 'IQ Tests',
     title: 'Account IQ Tests',
     description: 'Send fixed questions to each account on a schedule and flag accounts with abnormal quality (flag only; account status is never changed)',
     tabs: { flagged: 'Flagged accounts', plans: 'Plans', runs: 'Runs', events: 'State changes' },
     kind: { candy: 'Candy puzzle', pelican_svg: 'Pelican on a bicycle (SVG)' },
     kindShort: { candy: 'Candy', pelican_svg: 'SVG' },
+    intelligence: { title: 'IQ status', normal: 'Normal', degraded: 'Degraded', unknown: 'Unconfirmed', hint: 'Based on the latest candy test; request errors, skips, or missing tests are unconfirmed. SVG results do not affect this column.' },
     column: { title: 'IQ test', none: 'Not tested', last: 'Last' },
     outcome: { pass: 'Pass', quality_fail: 'Quality fail', infra_error: 'Infra error', skipped: 'Skipped' },
     state: { normal: 'Normal', suspect: 'Suspect', flagged: 'Flagged' },
@@ -54,7 +69,7 @@ export default {
       enabledHint: 'When off, the plan can only be run manually',
       checks: 'Checks',
       customPrompt: 'Custom prompt (empty = default)',
-      model: 'Model (empty = account default)',
+      model: 'Model (default: GPT-6 Astra)',
       maxTokens: 'Max output tokens',
       timeout: 'Timeout (seconds)',
       candyMode: 'Candy judging',
@@ -102,6 +117,11 @@ export default {
       statuses: { running: 'Running', done: 'Done', aborted: 'Aborted' }
     },
     result: {
+      viewSvg: 'View SVG',
+      noSvg: 'This test has no complete SVG to preview. Check the result reason or model output.',
+      svgLoadFailed: 'This SVG could not be rendered. Expand the model output to inspect it.',
+      loading: 'Loading test result…',
+      retry: 'Retry',
       account: 'Account',
       kind: 'Check',
       outcome: 'Outcome',

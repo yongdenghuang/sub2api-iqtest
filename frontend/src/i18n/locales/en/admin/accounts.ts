@@ -18,6 +18,11 @@ export default {
       dataExportIncludeProxies: 'Include proxies linked to the exported accounts',
       dataImport: 'Import',
       moreActions: 'More Actions',
+      displayDensity: 'Display density',
+      density: {
+        compact: 'Compact',
+        standard: 'Standard'
+      },
       dataActions: 'Data',
       toolActions: 'Tools',
       viewColumns: 'Columns',

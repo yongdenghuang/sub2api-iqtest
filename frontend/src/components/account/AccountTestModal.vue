@@ -250,6 +250,7 @@ import TextArea from '@/components/common/TextArea.vue'
 import { Icon } from '@/components/icons'
 import { useClipboard } from '@/composables/useClipboard'
 import { buildApiUrl } from '@/api/client'
+import { DEFAULT_TEST_MODEL } from '@/constants/accountTestModel'
 import { adminAPI } from '@/api/admin'
 import type { Account, ClaudeModel } from '@/types'
 
@@ -353,7 +354,10 @@ const loadAvailableModels = async () => {
       : models
     // Default selection by platform
     if (availableModels.value.length > 0) {
-      if (props.account.platform === 'gemini') {
+      const astraModel = availableModels.value.find(model => model.id === DEFAULT_TEST_MODEL)
+      if (astraModel) {
+        selectedModelId.value = astraModel.id
+      } else if (props.account.platform === 'gemini') {
         selectedModelId.value = availableModels.value[0].id
       } else {
         // Try to select Sonnet as default, otherwise use first model

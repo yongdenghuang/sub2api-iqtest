@@ -17,6 +17,7 @@ import (
 func (s *Service) RegisterRoutes(v1 *gin.RouterGroup, mw ...gin.HandlerFunc) {
 	g := v1.Group("/admin/iqtest", mw...)
 	g.GET("/defaults", s.getDefaults)
+	g.GET("/summary", s.accountSummary)
 
 	g.GET("/plans", s.listPlans)
 	g.POST("/plans", s.createPlan)
@@ -60,6 +61,7 @@ func queryInt(c *gin.Context, name string, def, max int) int {
 
 func (s *Service) getDefaults(c *gin.Context) {
 	response.Success(c, gin.H{
+		"default_model":        DefaultModel,
 		"candy_prompt":         DefaultCandyPrompt,
 		"pelican_prompt":       DefaultPelicanPrompt,
 		"policy":               Policy{}.withDefaults(),

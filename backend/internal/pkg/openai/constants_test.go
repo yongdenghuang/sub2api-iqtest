@@ -61,3 +61,8 @@ func TestGPT61SolIdentityAndEffort(t *testing.T) {
 	}
 	require.Contains(t, CodexBaseInstructionsForModel("gpt-6.1-sol"), "based on GPT-6")
 }
+
+func TestDefaultAccountTestModelIsAstra(t *testing.T) {
+	require.Equal(t, "gpt-6-astra", DefaultTestModel)
+	require.Contains(t, DefaultModelIDs(), DefaultTestModel)
+}

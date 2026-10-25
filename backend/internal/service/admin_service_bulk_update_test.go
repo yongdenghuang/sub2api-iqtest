@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/iqquality"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
@@ -42,6 +43,7 @@ type accountRepoStubForBulkUpdate struct {
 	listErr             error
 	listCalled          bool
 	lastListParams      pagination.PaginationParams
+	lastIQQuality       string
 	lastListFilters     struct {
 		platform    string
 		accountType string
@@ -128,9 +130,10 @@ func (s *accountRepoStubForBulkUpdate) ListAllWithFilters(context.Context, strin
 	return nil, nil
 }
 
-func (s *accountRepoStubForBulkUpdate) ListWithFilters(_ context.Context, params pagination.PaginationParams, platform, accountType, status, search string, groupID int64, privacyMode string) ([]Account, *pagination.PaginationResult, error) {
+func (s *accountRepoStubForBulkUpdate) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, accountType, status, search string, groupID int64, privacyMode string) ([]Account, *pagination.PaginationResult, error) {
 	s.listCalled = true
 	s.lastListParams = params
+	s.lastIQQuality = iqquality.FromContext(ctx)
 	s.lastListFilters.platform = platform
 	s.lastListFilters.accountType = accountType
 	s.lastListFilters.status = status
@@ -594,4 +597,17 @@ func TestAdminServiceBulkUpdateAccounts_ValidatesFilterResolvedOpenAITargets(t *
 	requireApplicationErrorReason(t, err, "OPENAI_BULK_TARGET_INVALID")
 	require.Equal(t, []int64{7}, repo.getByIDsIDs)
 	require.Zero(t, repo.bulkUpdateCalls)
+}
+
+func TestBulkUpdateRespectsIQQualityFilter(t *testing.T) {
+	repo := &accountRepoStubForBulkUpdate{listData: []Account{{ID: 7}}}
+	svc := &adminServiceImpl{accountRepo: repo}
+	ids, err := svc.resolveBulkUpdateTargetIDs(context.Background(), &BulkUpdateAccountFilters{IQQuality: "quality_fail"})
+	require.NoError(t, err)
+	require.Equal(t, []int64{7}, ids)
+	require.Equal(t, "quality_fail", repo.lastIQQuality)
+	repo.listCalled = false
+	_, err = svc.resolveBulkUpdateTargetIDs(context.Background(), &BulkUpdateAccountFilters{IQQuality: "invalid"})
+	require.Error(t, err)
+	require.False(t, repo.listCalled)
 }

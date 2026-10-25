@@ -24,11 +24,11 @@
     </button>
   </div>
 
-  <IQResultListDialog :show="showList" :title="listTitle" :items="listItems" :loading="listLoading" @close="showList = false" />
+  <IQResultListDialog :show="showList" :title="listTitle" :items="listItems" :loading="listLoading" :preview-latest-svg="previewLatestSvg" @close="closeHistory" />
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -57,17 +57,29 @@ const listTitle = ref('')
 const listItems = ref<IQResult[]>([])
 const listLoading = ref(false)
 
+const previewLatestSvg = ref(false)
+let historyRequest = 0
+
+function closeHistory() {
+  historyRequest++
+  showList.value = false
+}
+onBeforeUnmount(closeHistory)
+
 async function openHistory(s: IQStateRow) {
+  const request = ++historyRequest
+  previewLatestSvg.value = s.kind === 'pelican_svg'
   listTitle.value = `${s.account_name} #${s.account_id} · ${t(`iqtest.kind.${s.kind}`)}`
   listItems.value = []
   showList.value = true
   listLoading.value = true
   try {
-    listItems.value = await iqtestAPI.listAccountResults(s.account_id, s.kind, 100)
+    const items = await iqtestAPI.listAccountResults(s.account_id, s.kind, 100)
+    if (request === historyRequest) listItems.value = items
   } catch (e) {
-    appStore.showError(extractApiErrorMessage(e, t('iqtest.common.loadFailed')))
+    if (request === historyRequest) appStore.showError(extractApiErrorMessage(e, t('iqtest.common.loadFailed')))
   } finally {
-    listLoading.value = false
+    if (request === historyRequest) listLoading.value = false
   }
 }
 </script>

@@ -118,6 +118,23 @@ describe('AccountTestModal', () => {
     localStorage.clear()
   })
 
+  it('defaults to Astra when the account catalog includes it', async () => {
+    getAvailableModelsMock.mockResolvedValue([
+      { id: 'gpt-5.4', display_name: 'GPT-5.4' },
+      { id: 'gpt-6-astra', display_name: 'GPT-6 Astra' }
+    ])
+    const wrapper = mount(AccountTestModal, {
+      props: { show: false, account: buildAccount() },
+      global: { stubs: { BaseDialog: BaseDialogStub, Select: SelectStub, TextArea: TextAreaStub, Icon: true } }
+    })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    expect((wrapper.vm as any).selectedModelId).toBe('gpt-6-astra')
+    await (wrapper.vm as any).startTest()
+    expect(JSON.parse((global.fetch as any).mock.calls[0][1].body).model_id).toBe('gpt-6-astra')
+    wrapper.unmount()
+  })
+
   it('posts compact mode for OpenAI compact probe', async () => {
     const wrapper = mount(AccountTestModal, {
       props: {

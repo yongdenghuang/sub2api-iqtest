@@ -1,9 +1,11 @@
 <template>
-  <AppLayout>
+  <AppLayout class="accounts-page" :class="{ 'accounts-page--compact': compactView }">
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-wrap-reverse items-start justify-between gap-3">
+        <IQAccountSummary :refresh-token="iqRefreshToken" />
+        <div class="account-toolbar flex flex-wrap-reverse items-start justify-between gap-3">
           <AccountTableFilters
+            class="account-filters"
             v-model:searchQuery="params.search"
             :filters="params"
             :groups="groups"
@@ -12,11 +14,30 @@
             @update:searchQuery="debouncedReload"
           />
           <AccountTableActions
+            class="account-toolbar-actions"
             :loading="loading"
             @refresh="handleManualRefresh"
             @create="showCreate = true"
           >
             <template #after>
+              <RouterLink to="/admin/iqtest?tab=plans" class="btn btn-secondary">{{ t('iqtest.tabs.plans') }}</RouterLink>
+              <div
+                class="account-density-control hidden lg:inline-flex"
+                role="group"
+                :aria-label="t('admin.accounts.displayDensity')"
+              >
+                <button
+                  v-for="density in accountDensities"
+                  :key="density"
+                  type="button"
+                  class="account-density-button"
+                  :class="{ 'account-density-button--active': accountDensity === density }"
+                  :aria-pressed="accountDensity === density"
+                  @click="setAccountDensity(density)"
+                >
+                  {{ t(`admin.accounts.density.${density}`) }}
+                </button>
+              </div>
               <!-- Auto Refresh Dropdown -->
               <div class="relative" ref="autoRefreshDropdownRef">
                 <button
@@ -176,7 +197,10 @@
       </template>
       <template #table>
         <AccountBulkActionsBar
+          class="account-bulk-actions"
           :selected-ids="selIds"
+          :iq-testing="iqBatchRef?.busy ?? false"
+          @iq-test="iqBatchRef?.start([...selIds])"
           :total-results="pagination.total"
           :selecting-all="selectingAllResults"
           :all-results-selected="allResultsSelected"
@@ -191,6 +215,7 @@
           @select-all-results="handleSelectAllResults"
           @toggle-schedulable="handleBulkToggleSchedulable"
         />
+        <IQBatchRun ref="iqBatchRef" @updated="handleIQUpdated" />
         <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable
           ref="dataTableRef"
@@ -203,7 +228,7 @@
           default-sort-key="name"
           default-sort-order="asc"
           :sort-storage-key="ACCOUNT_SORT_STORAGE_KEY"
-          :estimate-row-height="156"
+          :estimate-row-height="compactView ? 112 : 156"
           :overscan="5"
           :virtualize-threshold="50"
         >
@@ -223,7 +248,7 @@
             <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ value }}</span>
           </template>
           <template #cell-name="{ row, value }">
-            <div class="flex flex-col">
+            <div class="account-name flex flex-col">
               <HelpTooltip
                 v-if="accountHomepageUrl(row)"
                 :content="accountHomepageUrl(row)"
@@ -235,13 +260,14 @@
                     :href="accountHomepageUrl(row)"
                     target="_blank"
                     rel="noopener noreferrer"
+                    :title="value"
                     class="border-b border-dotted border-gray-300 font-medium text-gray-900 dark:border-dark-600 dark:text-white"
                   >
                     {{ value }}
                   </a>
                 </template>
               </HelpTooltip>
-              <span v-else class="font-medium text-gray-900 dark:text-white">{{ value }}</span>
+              <span v-else :title="value" class="font-medium text-gray-900 dark:text-white">{{ value }}</span>
               <span
                 v-if="accountDisplayEmail(row)"
                 class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px]"
@@ -290,6 +316,9 @@
             <div class="flex items-center gap-1.5">
               <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
             </div>
+          </template>
+          <template #cell-iq_status="{ row }">
+            <IQStatusCell :states="iqStates[row.id]" />
           </template>
           <template #cell-iqtest="{ row }">
             <IQAccountCell :states="iqStates[row.id]" />
@@ -533,7 +562,11 @@ import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRulesModal.vue'
 import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfilesModal.vue'
+import { RouterLink } from 'vue-router'
+import IQAccountSummary from '@/views/admin/iqtest/IQAccountSummary.vue'
+import IQBatchRun from '@/views/admin/iqtest/IQBatchRun.vue'
 import IQAccountCell from '@/views/admin/iqtest/IQAccountCell.vue'
+import IQStatusCell from '@/views/admin/iqtest/IQStatusCell.vue'
 import { useIQAccountStates } from '@/views/admin/iqtest/useIQAccountStates'
 import { fetchAllAccountIds } from '@/utils/accountSelection'
 import { buildGrokUsageRefreshKey, buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
@@ -559,6 +592,34 @@ const accountGroupsForRow = (account: Pick<AccountListItem, 'group_ids'>): Admin
 }
 const accountTableRef = ref<HTMLElement | null>(null)
 const dataTableRef = ref<InstanceType<typeof DataTable> | null>(null)
+const iqRefreshToken = ref(0)
+const iqBatchRef = ref<InstanceType<typeof IQBatchRun> | null>(null)
+const handleIQUpdated = () => { void load().catch(() => {}) }
+
+const accountDensities = ['compact', 'standard'] as const
+type AccountDensity = typeof accountDensities[number]
+const ACCOUNT_DENSITY_STORAGE_KEY = 'account-display-density'
+const loadAccountDensity = (): AccountDensity => {
+  try {
+    return localStorage.getItem(ACCOUNT_DENSITY_STORAGE_KEY) === 'standard' ? 'standard' : 'compact'
+  } catch {
+    return 'compact'
+  }
+}
+const accountDensity = ref<AccountDensity>(loadAccountDensity())
+const compactView = computed(() => accountDensity.value === 'compact')
+const setAccountDensity = (density: AccountDensity) => {
+  accountDensity.value = density
+  try {
+    localStorage.setItem(ACCOUNT_DENSITY_STORAGE_KEY, density)
+  } catch {
+    // The layout can still be changed when browser storage is unavailable.
+  }
+}
+watch(compactView, () => {
+  // Discard measured row heights after changing density in a virtualized list.
+  dataTableRef.value?.virtualizer?.measure()
+}, { flush: 'post' })
 type AccountBulkEditTarget =
   | {
       mode: 'selected'
@@ -574,6 +635,7 @@ type AccountBulkEditTarget =
         status?: string
         group?: string
         search?: string
+        iq_quality?: string
         privacy_mode?: string
         sort_by?: string
         sort_order?: AccountSortOrder
@@ -1117,6 +1179,7 @@ const {
   initialParams: {
     ...loadInitialAccountFilterValues(),
     type: '',
+    iq_quality: '',
     privacy_mode: '',
     group: '',
     search: '',
@@ -1216,6 +1279,7 @@ const buildUpstreamBillingRateFilters = () => {
     status: typeof rawParams.status === 'string' ? rawParams.status : '',
     group: typeof rawParams.group === 'string' ? rawParams.group : '',
     search: typeof rawParams.search === 'string' ? rawParams.search : '',
+    iq_quality: typeof rawParams.iq_quality === 'string' ? rawParams.iq_quality : '',
     privacy_mode: typeof rawParams.privacy_mode === 'string' ? rawParams.privacy_mode : '',
     sort_by: sortState.sort_by,
     sort_order: sortState.sort_order
@@ -1375,6 +1439,7 @@ const handleSort = (key: string, order: AccountSortOrder) => {
 
 watch(loading, (isLoading, wasLoading) => {
   if (wasLoading && !isLoading) {
+    iqRefreshToken.value++
     upstreamBillingNow.value = Date.now()
   }
   if (wasLoading && !isLoading && pendingTodayStatsRefresh.value) {
@@ -1495,6 +1560,7 @@ const refreshAccountsIncrementally = async () => {
         platform?: string
         type?: string
         status?: string
+        iq_quality?: string
         privacy_mode?: string
         group?: string
         search?: string
@@ -1515,6 +1581,7 @@ const refreshAccountsIncrementally = async () => {
       hasPendingListSync.value = false
     }
     upstreamBillingNow.value = Date.now()
+    iqRefreshToken.value++
 
     await refreshTodayStatsBatch()
   } catch (error) {
@@ -1834,6 +1901,7 @@ const allColumns = computed(() => {
     { key: 'platform_type', label: t('admin.accounts.columns.platformType'), sortable: false },
     { key: 'capacity', label: t('admin.accounts.columns.capacity'), sortable: false },
     { key: 'status', label: t('admin.accounts.columns.status'), sortable: true },
+    { key: 'iq_status', label: t('iqtest.intelligence.title'), sortable: false },
     { key: 'iqtest', label: t('iqtest.column.title'), sortable: false },
     { key: 'schedulable', label: t('admin.accounts.columns.schedulable'), sortable: true },
     { key: 'today_stats', label: t('admin.accounts.columns.todayStats'), sortable: false }
@@ -1854,7 +1922,7 @@ const allColumns = computed(() => {
     { key: 'notes', label: t('admin.accounts.columns.notes'), sortable: false },
     { key: 'actions', label: t('admin.accounts.columns.actions'), sortable: false }
   )
-  return c
+  return c.map(column => ({ ...column, class: `account-column-${column.key}` }))
 })
 
 // Columns that can be toggled (exclude select, name, and actions)
@@ -1863,7 +1931,11 @@ const toggleableColumns = computed(() =>
 )
 
 // Filtered columns based on visibility
-const iqStates = useIQAccountStates(() => accounts.value, () => !hiddenColumns.has('iqtest'))
+const iqStates = useIQAccountStates(
+  () => accounts.value,
+  () => !hiddenColumns.has('iq_status') || !hiddenColumns.has('iqtest'),
+  () => iqRefreshToken.value
+)
 
 const cols = computed(() =>
   allColumns.value.filter(col =>
@@ -2103,6 +2175,7 @@ const buildBulkEditFilterSnapshot = () => {
     status: typeof rawParams.status === 'string' ? rawParams.status : '',
     group: typeof rawParams.group === 'string' ? rawParams.group : '',
     search: typeof rawParams.search === 'string' ? rawParams.search : '',
+    iq_quality: typeof rawParams.iq_quality === 'string' ? rawParams.iq_quality : '',
     privacy_mode: typeof rawParams.privacy_mode === 'string' ? rawParams.privacy_mode : '',
     sort_by: typeof rawParams.sort_by === 'string' ? rawParams.sort_by : '',
     sort_order: sortOrder
@@ -2179,6 +2252,7 @@ const buildAccountQueryFilters = () => ({
   type: params.type || '',
   status: params.status || '',
   group: params.group || '',
+  iq_quality: params.iq_quality || '',
   privacy_mode: params.privacy_mode || '',
   search: params.search || '',
   sort_by: sortState.sort_by,
@@ -2633,6 +2707,119 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.account-density-control {
+  @apply shrink-0 items-center rounded-lg border border-gray-200 bg-white p-0.5 dark:border-dark-600 dark:bg-dark-800;
+}
+
+.account-density-button {
+  @apply rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gray-400;
+}
+
+.account-density-button--active {
+  @apply bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300;
+}
+
+/* Keep touch controls and mobile cards at their normal size. */
+@media (min-width: 1024px) {
+  .accounts-page--compact :deep(main) {
+    padding: 16px;
+  }
+
+  .accounts-page--compact :deep(header.glass > div) {
+    height: 56px;
+  }
+
+  .accounts-page--compact :deep(.table-page-layout) {
+    height: calc(100vh - 56px - 32px);
+    gap: 12px;
+  }
+
+  .accounts-page--compact :deep(.account-filters),
+  .accounts-page--compact :deep(.account-toolbar-actions) {
+    gap: 8px;
+  }
+
+  .accounts-page--compact :deep(.account-filters > div) {
+    width: 132px;
+  }
+
+  .accounts-page--compact :deep(.account-filters > div:first-child) {
+    width: 180px;
+  }
+
+  .accounts-page--compact :deep(.account-filters > .account-privacy-filter) {
+    width: 156px;
+  }
+
+  .accounts-page--compact :deep(.account-toolbar .btn),
+  .accounts-page--compact :deep(.account-toolbar .input),
+  .accounts-page--compact :deep(.account-toolbar .select-trigger) {
+    height: 32px;
+    min-height: 32px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .accounts-page--compact :deep(.account-toolbar .btn),
+  .accounts-page--compact :deep(.account-toolbar .select-trigger) {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .accounts-page--compact :deep(.account-bulk-actions) {
+    margin-bottom: 4px;
+    padding: 8px 12px;
+  }
+
+  .accounts-page--compact :deep(.table-scroll-container) {
+    border-radius: 12px;
+  }
+
+  .accounts-page--compact :deep(.table-scroll-container th),
+  .accounts-page--compact :deep(.table-scroll-container td:not([colspan])) {
+    padding: 8px;
+    font-size: 12px;
+    line-height: 18px;
+    letter-spacing: normal;
+  }
+
+  .accounts-page--compact :deep(.table-scroll-container td .text-sm),
+  .accounts-page--compact :deep(.account-bulk-actions .text-sm) {
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .accounts-page--compact :deep(.table-wrapper) {
+    --select-col-width: 36px;
+  }
+
+  .accounts-page--compact :deep(.table-scroll-container .account-column-select) {
+    box-sizing: border-box;
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .accounts-page--compact .account-name {
+    width: 164px;
+    max-width: 164px;
+  }
+
+  .accounts-page--compact .account-name > span,
+  .accounts-page--compact .account-name a {
+    display: block;
+    max-width: 164px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 .account-tools-menu-item {
   @apply flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700;
 }

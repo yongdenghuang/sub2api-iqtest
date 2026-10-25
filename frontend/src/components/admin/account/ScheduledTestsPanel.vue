@@ -472,6 +472,7 @@ import Select, { type SelectOption } from '@/components/common/Select.vue'
 import Input from '@/components/common/Input.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import { Icon } from '@/components/icons'
+import { DEFAULT_TEST_MODEL } from '@/constants/accountTestModel'
 import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
 import { formatDateTime } from '@/utils/format'
@@ -526,8 +527,14 @@ const newPlan = reactive({
   auto_recover: false
 })
 
+const defaultTestModel = () => props.modelOptions.some(model => model.value === DEFAULT_TEST_MODEL) ? DEFAULT_TEST_MODEL : ''
+watch(() => [props.show, props.modelOptions] as const, ([show]) => {
+  if (show && !newPlan.model_id) newPlan.model_id = defaultTestModel()
+}, { immediate: true })
+watch(() => props.accountId, () => { newPlan.model_id = defaultTestModel() })
+
 const resetNewPlan = () => {
-  newPlan.model_id = ''
+  newPlan.model_id = defaultTestModel()
   newPlan.cron_expression = ''
   newPlan.max_results = '100'
   newPlan.enabled = true

@@ -38,6 +38,15 @@ describe('scheduled test result selection', () => {
     listByAccount.mockResolvedValue([1, 2].map(id => ({ id, model_id: `model-${id}`, enabled: true })))
   })
 
+  it('defaults new plans to Astra after the model catalog loads, preserving a manual selection', async () => {
+    const wrapper = await openPanel()
+    await wrapper.setProps({ modelOptions: [{ value: 'gpt-6-astra', label: 'GPT-6 Astra' }] })
+    expect((wrapper.vm as any).newPlan.model_id).toBe('gpt-6-astra')
+    ;(wrapper.vm as any).newPlan.model_id = 'custom-model'
+    await wrapper.setProps({ modelOptions: [{ value: 'gpt-6-astra', label: 'Astra' }, { value: 'custom-model', label: 'Custom' }] })
+    expect((wrapper.vm as any).newPlan.model_id).toBe('custom-model')
+  })
+
   it.each(['resolve', 'reject'] as const)('ignores an old plan request that later %ss', async outcome => {
     const old = deferred<ReturnType<typeof result>[]>()
     listResults.mockReturnValueOnce(old.promise).mockResolvedValueOnce([result(22)])

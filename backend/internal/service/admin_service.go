@@ -469,6 +469,7 @@ type BulkUpdateAccountsInput struct {
 }
 
 type BulkUpdateAccountFilters struct {
+	IQQuality   string
 	Platform    string
 	Type        string
 	Status      string

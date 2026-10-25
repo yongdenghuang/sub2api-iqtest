@@ -16,6 +16,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/iqquality"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 )
@@ -1238,6 +1239,10 @@ func (s *adminServiceImpl) resolveBulkUpdateTargetIDs(ctx context.Context, filte
 		return nil, nil
 	}
 
+	ctx, qualityErr := iqquality.WithFilter(ctx, filters.IQQuality)
+	if qualityErr != nil {
+		return nil, infraerrors.BadRequest("INVALID_IQ_FILTER", qualityErr.Error())
+	}
 	groupID := int64(0)
 	switch strings.TrimSpace(filters.Group) {
 	case "":

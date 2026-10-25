@@ -2,8 +2,10 @@ package iqtest
 
 import (
 	"context"
+	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
@@ -11,11 +13,14 @@ import (
 // rate limited, overloaded or temporarily unschedulable.
 const ReasonCoolingDown Reason = "cooling_down"
 
+// DefaultModel is shared by every IQ check, including ad-hoc and scheduled runs.
+const DefaultModel = openai.DefaultTestModel
+
 // CheckConfig describes one check inside a plan. Zero values select defaults.
 type CheckConfig struct {
 	Kind           TestKind   `json:"kind"`
 	Prompt         string     `json:"prompt,omitempty"`          // empty = built-in prompt
-	Model          string     `json:"model,omitempty"`           // empty = the account test default
+	Model          string     `json:"model,omitempty"`           // empty = DefaultModel
 	MaxTokens      int        `json:"max_tokens,omitempty"`      // Claude test path only
 	TimeoutSeconds int        `json:"timeout_seconds,omitempty"` // per request
 	CandyMode      CandyMode  `json:"candy_mode,omitempty"`
@@ -23,6 +28,10 @@ type CheckConfig struct {
 }
 
 func (c CheckConfig) withDefaults() CheckConfig {
+	c.Model = strings.TrimSpace(c.Model)
+	if c.Model == "" {
+		c.Model = DefaultModel
+	}
 	switch c.Kind {
 	case TestCandy:
 		if c.Prompt == "" {
