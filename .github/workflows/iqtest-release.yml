@@ -13,10 +13,6 @@ on:
         type: string
         default: ''
     secrets:
-      IQTEST_DEPLOY_KEY:
-        required: true
-      IQTEST_KNOWN_HOSTS:
-        required: true
       IQTEST_VPS192_DEPLOY_KEY:
         required: true
       IQTEST_VPS192_KNOWN_HOSTS:
@@ -151,31 +147,6 @@ jobs:
 
   deploy:
     needs: [image, promote]
-    runs-on: ubuntu-latest
-    environment: production
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - name: Back up and deploy the tested image
-        env:
-          IMAGE: ${{ needs.image.outputs.image }}
-          DEPLOY_KEY: ${{ secrets.IQTEST_DEPLOY_KEY }}
-          KNOWN_HOSTS: ${{ secrets.IQTEST_KNOWN_HOSTS }}
-          REGISTRY_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          umask 077
-          task_ssh=$(mktemp -d)
-          trap 'rm -rf "$task_ssh"' EXIT
-          printf '%s\n' "$DEPLOY_KEY" > "$task_ssh/key"
-          printf '%s\n' "$KNOWN_HOSTS" > "$task_ssh/known_hosts"
-          printf '%s' "$REGISTRY_TOKEN" | ssh -i "$task_ssh/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$task_ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=4 root@38.55.111.50 "$IMAGE"
-          curl --fail --silent --show-error --retry 3 https://sapi.yongdh.top/health
-          echo "Deployed $IMAGE to https://sapi.yongdh.top after backup and health checks." >> "$GITHUB_STEP_SUMMARY"
-
-  deploy_secondary:
-    needs: [image, promote, deploy]
     runs-on: ubuntu-latest
     environment: production-vps192
     permissions:

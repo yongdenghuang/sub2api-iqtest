@@ -1,54 +1,36 @@
 # IQTest 定制版的官方版本更新
 
-生产分支：`feature/iqtest`。上游：`Wei-Shaw/sub2api`。生产站点：`https://sapi.yongdh.top`。
+生产分支：`feature/iqtest`。上游：`Wei-Shaw/sub2api`。
+唯一自动部署目标：`192.220.12.234` / `https://api.yongdh.top`。
 
 ## 自动更新流程
 
-1. GitHub Actions 每天北京时间 06:31 检查上游最新正式 release（排除预发布和草稿；GitHub 排队可能延迟）。也可手动运行 **IQTest upstream sync**。
-2. 如果该 release 已包含在生产分支中，不重复更新。否则从生产分支创建独立候选分支，用普通 Git merge 保留智商测试和账号页定制。冲突直接失败，生产分支与 VPS 不变。
-3. 在候选提交上运行官方 CI（后端单元 / 集成测试、lint、前端检查、部署脚本等），再运行智商测试专项前端测试、更新失败处理测试和完整前端构建。
-4. 构建 Linux amd64 定制镜像，发布到 `ghcr.io/yongdenghuang/sub2api-iqtest`。版本含 `-iqtest.<commit>`，使用不可变 digest 部署；不使用官方镜像或浮动 latest。
-5. 只有全部检查通过，才将候选提交快进合入生产分支。若分支已被其他人更新，停止以避免覆盖。
-6. VPS 拉取镜像成功后开启短暂维护页面，停止本项目 app，备份本项目 PostgreSQL 和 data，再切换镜像。数据库、Redis 和其他 VPS 应用不会被更新。
-7. 容器健康检查、运行版本核对、智商测试接口认证检查和数据库只读查询通过后解除维护；GPT-6 Astra 默认值由发布前的回归测试验证。不会为了验证部署实际调用模型。
+1. GitHub Actions 每天北京时间 06:31 检查上游最新正式 release，排除预发布和草稿。也可手动运行 **IQTest upstream sync**。
+2. 已包含的正式版本不重复合并。新版本从生产分支创建候选分支，用普通 Git merge 保留智商测试和账号页定制；冲突时停止，不修改生产服务。
+3. 在候选提交上运行官方 CI、智商测试专项检查、部署失败回退测试和完整前端构建。
+4. 构建 Linux amd64 定制镜像，发布到 `ghcr.io/yongdenghuang/sub2api-iqtest`。版本含 `-iqtest.<commit>`，以不可变 digest 部署。
+5. 检查通过才将候选提交快进合入生产分支，再部署到 **api.yongdh.top**。生产分支被并发更新时停止，避免覆盖。
+6. VPS 拉取镜像后，开启维护状态，停止本项目应用并备份实际数据库、配置和数据，再验证、切换新版本。
 
-直接推送生产分支也会触发同样的检查、镜像构建和自动部署。上游同步内部显式调用可复用工作流，不依赖 `GITHUB_TOKEN` 的 push 再次触发 Actions。
+直接推送生产分支也会触发上述流程。上游同步显式调用可复用工作流，不依赖 `GITHUB_TOKEN` 的 push 再次触发 Actions。合并、CI、构建或镜像拉取失败时不修改运行中的服务。
 
-## 失败与恢复
+## 凭证和更新边界
 
-- 合并 / CI / 构建 / 镜像拉取失败时不修改运行中的服务。
-- 备份失败时启动原 app，不启动新镜像。
-- 新版本健康检查失败时，在维护窗口内恢复数据库、data 和原 app。恢复失败则保留维护状态与备份，等待排查。
-- 进入维护后的更新失败会写入 `/opt/sub2api-iqtest/UPDATE_BLOCKED`，阻止后续自动部署。确认故障已解决、备份可用和原站点健康后，由管理员删除此文件，再从 Actions 重跑失败工作流。
-- 自动备份位于 `/opt/sub2api-iqtest/backups/auto-*`，保留最近三份；仅清理本定制镜像仓库的旧镜像，保留当前与上一版。不执行全局 Docker prune。
-- 备份包含应用数据与配置，目录与文件仅 root 可读。此备份用于升级回退，不替代异地灾备。
+Actions 使用独立 SSH 密钥，服务器授权限定 `restrict` 和固定命令，仅接受本仓库的 `@sha256:` 镜像，不能执行任意 shell 或交互登录。主机公钥固定校验。
 
-正常切换时 Compose 额外读取 `compose.iqtest-image.json`；手工管理时应同时传入：
+GHCR 拉取使用本次工作流的短期 `GITHUB_TOKEN`，通过 SSH 标准输入传递；临时 Docker 登录文件在拉取后删除。不保存 VPS 密码、网站管理员密码或 GitHub 个人令牌。管理员改密码和开启 MFA 不影响更新。
 
-```sh
-cd /opt/sub2api-iqtest
-docker compose -f compose.yaml -f compose.iqtest-image.json ps
-```
+部署验证不会实际调用模型。定制构建禁止在后台直接下载官方二进制覆盖，以保留定制功能。特权部署程序需要管理员单独安装，应用镜像不能自动替换它。
 
-## 凭证和维护入口
+## 旧 VPS 已退出自动部署
 
-Actions 的 `IQTEST_DEPLOY_KEY` 是单独生成的 SSH 密钥，服务器授权使用 `restrict` 和固定命令。它仅能把本仓库的 `@sha256:` 镜像交给 root 所有的部署程序，不能执行任意 shell、端口转发或交互登录。`IQTEST_KNOWN_HOSTS` 固定 VPS 主机公钥。
+`38.55.111.50` / `sapi.yongdh.top` 已从发布工作流移除，后续更新不再连接该服务器，也不再是现用 VPS 更新的前置依赖。旧的 `IQTEST_DEPLOY_KEY` / `IQTEST_KNOWN_HOSTS` 不再使用。
 
-GHCR 拉取使用工作流当前运行的短期 `GITHUB_TOKEN`，通过 SSH 标准输入传递，临时 Docker 登录文件在拉取后删除。无需存储 GitHub 个人令牌、VPS 登录密码或网站管理员密码；管理员改密码 / 开启 MFA 不影响更新。
+仓库中的 `update.py` 保留历史 Docker 部署实现，并提供 `native_update.py` 依赖的命令与镜像校验函数；当前自动部署入口仅为 `native_update.py`。
 
-服务器固定部署程序：`/usr/local/lib/sub2api-iqtest/update.py`；SSH 入口：`/usr/local/sbin/sub2api-iqtest-deploy`。更新此特权程序需要管理员单独安装，应用镜像不能自动替换它。
+## 现用 VPS 的安装与数据
 
-HTTPS Nginx 配置通过 `/www/sites/sapi.yongdh.top/iqtest-maintenance` 控制维护响应。切换期间不要手动移除此文件；数据库回退完成前网站必须保持维护状态。
-
-定制构建禁止后台下载官方二进制做更新或回退，版本面板提供 Actions 更新记录入口，避免丢失定制功能。
-
-## 人工处理边界
-
-遇到上游破坏性接口调整、合并冲突、CI 失败或 GitHub 拒绝机器人修改 workflow 文件，需要先修复候选分支再发布。自动流程不会强制覆盖、忽略失败检查或改动账号凭证。
-
-## 第二台 VPS：保留已有账号的原生安装
-
-`192.220.12.234` / `https://api.yongdh.top` 保持原来的 systemd 安装方式。第一个站点部署通过后，工作流将同一个已测试镜像交给第二台服务器；从镜像提取二进制和 resources 更新 `/opt/sub2api`。不会重建数据库容器或 Redis，也不会将第一个站点的账号覆盖到第二个站点。
+`192.220.12.234` / `https://api.yongdh.top` 保持原来的 systemd 安装方式。工作流检查通过后，将已测试镜像交给该服务器；从镜像提取二进制和 resources 更新 `/opt/sub2api`。不会重建数据库容器或 Redis，也不会覆盖已有账号。
 
 - 服务：`sub2api.service`，端口 `127.0.0.1:8081`（Nginx 转发目标）。显式使用 `/opt/sub2api/config.yaml`，保留原配置与签名密钥。
 - 实际数据库：`sub2api-postgres` 容器内的 **`sub2api_v2`**，应用角色也是 `sub2api_v2`。Compose 默认的 `sub2api` 是空库，不能用它备份或恢复。
