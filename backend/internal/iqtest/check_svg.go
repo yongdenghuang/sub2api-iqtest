@@ -27,10 +27,10 @@ const (
 
 // SVGOptions tunes the static check. Zero values select the defaults.
 type SVGOptions struct {
-	MaxBytes    int // reject larger documents (default 256 KiB, measured from the first <svg)
-	MaxElements int // reject documents with more elements (default 5000)
-	MinShapes   int // minimum drawing primitives (default 8)
-	MinScore    int // minimum heuristic score; 0 disables the score gate
+	MaxBytes    int `json:"max_bytes,omitempty"`    // reject larger documents (default 256 KiB, measured from the first <svg)
+	MaxElements int `json:"max_elements,omitempty"` // reject documents with more elements (default 5000)
+	MinShapes   int `json:"min_shapes,omitempty"`   // minimum drawing primitives (default 8)
+	MinScore    int `json:"min_score,omitempty"`    // minimum heuristic score; 0 disables the score gate
 }
 
 func (o SVGOptions) withDefaults() SVGOptions {
