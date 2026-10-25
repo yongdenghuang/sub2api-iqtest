@@ -12,7 +12,7 @@ fi
 # Never replace the custom branch or use the upstream development branch.
 git fetch --no-tags "https://github.com/$upstream.git" "refs/tags/$tag:refs/iqtest-upstream/$tag"
 upstream_sha=$(git rev-parse "refs/iqtest-upstream/$tag^{commit}")
-if git merge-base --is-ancestor "$upstream_sha" HEAD; then
+if git merge-base --is-ancestor "$upstream_sha" HEAD && [[ $(cat .github/iqtest/upstream-version) == "$tag" ]]; then
   echo 'changed=false' >> "$GITHUB_OUTPUT"
   echo "Official $tag is already included. No deployment requested." >> "$GITHUB_STEP_SUMMARY"
   exit 0
@@ -22,7 +22,7 @@ git config user.name 'github-actions[bot]'
 git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 branch="automation/upstream-$tag-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 git checkout -b "$branch"
-if ! git merge --no-ff "$upstream_sha" -m "Merge official $tag into IQTest edition"; then
+if ! git merge --no-ff --no-commit "$upstream_sha"; then
   {
     echo "## Official $tag requires conflict resolution"
     echo 'Production branch and VPS were not changed.'
@@ -33,6 +33,9 @@ if ! git merge --no-ff "$upstream_sha" -m "Merge official $tag into IQTest editi
   git merge --abort
   exit 1
 fi
+printf '%s\n' "$tag" > .github/iqtest/upstream-version
+git add .github/iqtest/upstream-version
+git commit -m "Merge official $tag into IQTest edition"
 git push origin "HEAD:refs/heads/$branch"
 {
   echo 'changed=true'
