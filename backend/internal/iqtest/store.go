@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq" // PostgreSQL driver (already a dependency of the project)
+	"github.com/lib/pq" // PostgreSQL driver (already a dependency of the project)
 )
 
 // ErrNotFound is returned when a row does not exist.
@@ -537,6 +537,26 @@ func (s *Store) ListStates(ctx context.Context, flaggedOnly bool, kind string, l
 	if err != nil {
 		return nil, 0, err
 	}
+	out, err := scanStates(rows)
+	return out, total, err
+}
+
+// ListStatesByAccounts returns every check state of the given accounts, for
+// showing results next to the official account list.
+func (s *Store) ListStatesByAccounts(ctx context.Context, accountIDs []int64) ([]*StateRow, error) {
+	if len(accountIDs) == 0 {
+		return []*StateRow{}, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT account_id, kind, account_name, platform, plan_id, state, flagged FROM iq_account_state
+		 WHERE account_id = ANY($1) ORDER BY account_id, kind`, pq.Array(accountIDs))
+	if err != nil {
+		return nil, err
+	}
+	return scanStates(rows)
+}
+
+func scanStates(rows *sql.Rows) ([]*StateRow, error) {
 	defer func() { _ = rows.Close() }()
 	out := []*StateRow{}
 	for rows.Next() {
@@ -544,15 +564,15 @@ func (s *Store) ListStates(ctx context.Context, flaggedOnly bool, kind string, l
 		var kindStr string
 		var raw []byte
 		if err := rows.Scan(&r.AccountID, &kindStr, &r.AccountName, &r.Platform, &r.PlanID, &raw, &r.Flagged); err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		r.Kind = TestKind(kindStr)
 		if err := json.Unmarshal(raw, &r.AccountState); err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		out = append(out, &r)
 	}
-	return out, total, rows.Err()
+	return out, rows.Err()
 }
 
 // ---------- events ----------

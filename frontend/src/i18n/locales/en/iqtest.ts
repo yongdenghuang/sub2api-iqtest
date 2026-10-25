@@ -5,6 +5,8 @@ export default {
     description: 'Send fixed questions to each account on a schedule and flag accounts with abnormal quality (flag only; account status is never changed)',
     tabs: { flagged: 'Flagged accounts', plans: 'Plans', runs: 'Runs', events: 'State changes' },
     kind: { candy: 'Candy puzzle', pelican_svg: 'Pelican on a bicycle (SVG)' },
+    kindShort: { candy: 'Candy', pelican_svg: 'SVG' },
+    column: { title: 'IQ test', none: 'Not tested', last: 'Last' },
     outcome: { pass: 'Pass', quality_fail: 'Quality fail', infra_error: 'Infra error', skipped: 'Skipped' },
     state: { normal: 'Normal', suspect: 'Suspect', flagged: 'Flagged' },
     reason: {

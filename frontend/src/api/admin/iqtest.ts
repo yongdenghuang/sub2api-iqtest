@@ -190,6 +190,13 @@ export const iqtestAPI = {
       })
     ).data
   },
+  /** All check states of the given accounts, used by the account list column. */
+  async listStatesByAccounts(accountIds: number[]): Promise<IQStateRow[]> {
+    return (
+      (await apiClient.get<IQStateRow[]>(`${base}/states/by-accounts`, { params: { ids: accountIds.join(',') } }))
+        .data ?? []
+    )
+  },
   async listEvents(page = 1, pageSize = 20): Promise<BasePaginationResponse<IQEvent>> {
     return (
       await apiClient.get<BasePaginationResponse<IQEvent>>(`${base}/events`, {

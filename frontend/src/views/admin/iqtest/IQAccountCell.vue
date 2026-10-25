@@ -1,0 +1,73 @@
+<template>
+  <!-- IQ-test results of one account, shown as a column of the official account list. -->
+  <div class="flex flex-col gap-1">
+    <span v-if="!states?.length" class="text-xs text-gray-400">{{ t('iqtest.column.none') }}</span>
+    <button
+      v-for="s in states"
+      :key="s.kind"
+      type="button"
+      class="flex items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs hover:bg-gray-100 dark:hover:bg-dark-700"
+      :title="tooltip(s)"
+      @click="openHistory(s)"
+    >
+      <span class="w-8 shrink-0 text-gray-500 dark:text-gray-400">{{ t(`iqtest.kindShort.${s.kind}`) }}</span>
+      <span class="badge" :class="stateClass(s.state)">{{ stateLabel(s.state) }}</span>
+      <span v-if="s.consecutive_fails > 0" class="text-red-600 dark:text-red-400">×{{ s.consecutive_fails }}</span>
+      <span class="inline-flex gap-0.5">
+        <span
+          v-for="(ok, i) in (s.recent || []).slice(-RECENT)"
+          :key="i"
+          class="inline-block h-2 w-2 rounded-sm"
+          :class="ok ? 'bg-green-500' : 'bg-red-500'"
+        ></span>
+      </span>
+    </button>
+  </div>
+
+  <IQResultListDialog :show="showList" :title="listTitle" :items="listItems" :loading="listLoading" @close="showList = false" />
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useAppStore } from '@/stores/app'
+import { extractApiErrorMessage } from '@/utils/apiError'
+import { formatDateTime } from '@/utils/format'
+import iqtestAPI from '@/api/admin/iqtest'
+import type { IQResult, IQStateRow } from '@/api/admin/iqtest'
+import IQResultListDialog from './IQResultListDialog.vue'
+import { stateClass, useIQLabels } from './labels'
+
+defineProps<{ states?: IQStateRow[] }>()
+
+const RECENT = 6
+const { t } = useI18n()
+const appStore = useAppStore()
+const { outcomeLabel, reasonLabel, stateLabel } = useIQLabels()
+
+function tooltip(s: IQStateRow) {
+  const parts = [`${t('iqtest.column.last')}: ${outcomeLabel(s.last_outcome)}`]
+  if (s.last_reason) parts.push(reasonLabel(s.last_reason))
+  parts.push(formatDateTime(s.updated_at))
+  return `${t(`iqtest.kind.${s.kind}`)} · ${parts.join(' · ')}`
+}
+
+const showList = ref(false)
+const listTitle = ref('')
+const listItems = ref<IQResult[]>([])
+const listLoading = ref(false)
+
+async function openHistory(s: IQStateRow) {
+  listTitle.value = `${s.account_name} #${s.account_id} · ${t(`iqtest.kind.${s.kind}`)}`
+  listItems.value = []
+  showList.value = true
+  listLoading.value = true
+  try {
+    listItems.value = await iqtestAPI.listAccountResults(s.account_id, s.kind, 100)
+  } catch (e) {
+    appStore.showError(extractApiErrorMessage(e, t('iqtest.common.loadFailed')))
+  } finally {
+    listLoading.value = false
+  }
+}
+</script>

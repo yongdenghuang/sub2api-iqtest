@@ -2,7 +2,9 @@ package iqtest
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -32,6 +34,7 @@ func (s *Service) RegisterRoutes(v1 *gin.RouterGroup, mw ...gin.HandlerFunc) {
 	g.POST("/accounts/:id/clear", s.clearAccountState)
 
 	g.GET("/states", s.listStates)
+	g.GET("/states/by-accounts", s.listStatesByAccounts)
 	g.GET("/events", s.listEvents)
 }
 
@@ -303,6 +306,43 @@ func (s *Service) listStates(c *gin.Context) {
 		return
 	}
 	response.Paginated(c, items, int64(total), page, size)
+}
+
+// maxStateAccounts caps one by-accounts lookup; the account list pages are smaller.
+const maxStateAccounts = 500
+
+// listStatesByAccounts serves ?ids=1,2,3 with all check states of those accounts.
+func (s *Service) listStatesByAccounts(c *gin.Context) {
+	ids, err := parseIDList(c.Query("ids"), maxStateAccounts)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	items, err := s.store.ListStatesByAccounts(c.Request.Context(), ids)
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, items)
+}
+
+func parseIDList(raw string, max int) ([]int64, error) {
+	ids := []int64{}
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(part, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, fmt.Errorf("invalid id %q", part)
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) > max {
+		return nil, fmt.Errorf("at most %d ids", max)
+	}
+	return ids, nil
 }
 
 func (s *Service) listEvents(c *gin.Context) {

@@ -5,6 +5,8 @@ export default {
     description: '按计划逐账号发送固定题目，标记质量异常的账号（默认只标记，不改账号状态）',
     tabs: { flagged: '异常账号', plans: '测试计划', runs: '运行记录', events: '状态变更' },
     kind: { candy: '糖果题', pelican_svg: '鹈鹕骑自行车 SVG' },
+    kindShort: { candy: '糖果', pelican_svg: 'SVG' },
+    column: { title: '智商测试', none: '未测试', last: '最近' },
     outcome: { pass: '通过', quality_fail: '质量失败', infra_error: '基础设施错误', skipped: '已跳过' },
     state: { normal: '正常', suspect: '可疑', flagged: '已标记' },
     reason: {
