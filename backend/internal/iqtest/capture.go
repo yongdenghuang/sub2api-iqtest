@@ -26,6 +26,7 @@ type PinnedRequest struct {
 	AccountID int64
 	Model     string
 	Prompt    string
+	MaxTokens int           // Claude test path only (needs the service hook); 0 keeps the official default
 	Timeout   time.Duration // default 3 minutes
 }
 
@@ -60,6 +61,7 @@ func RunPinned(parent context.Context, tester AccountTester, req PinnedRequest) 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/internal/iqtest", nil).WithContext(ctx)
+	c.Set(service.AccountTestOverrideKey, service.AccountTestOverride{Prompt: req.Prompt, MaxTokens: req.MaxTokens})
 
 	start := time.Now()
 	var callErr error
