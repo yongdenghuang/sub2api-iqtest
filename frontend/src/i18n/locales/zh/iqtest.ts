@@ -1,5 +1,14 @@
 export default {
   iqtest: {
+    accountOrder: {
+      button: '手动排序', title: '调整账号显示顺序',
+      hint: '拖动左侧手柄，或用上下按钮调整全部账号。保存后刷新、分页仍保留顺序；不影响调度优先级。',
+      drag: '拖动调整顺序', moveUp: '上移 {name}', moveDown: '下移 {name}',
+      save: '保存并应用', saved: '账号显示顺序已保存',
+      loadFailed: '账号顺序加载失败，请重试。',
+      saveFailed: '未能确认保存结果，请刷新顺序后重试。',
+      conflict: '账号列表或顺序已发生变化，请刷新后重新调整。'
+    },
     updates: {
       managed: '定制版自动更新',
       hint: '官方正式版通过检查后，自动备份并部署；更新失败时停止。',

@@ -55,6 +55,7 @@ const DataTableStub = {
         {{ column.sortable ? 'sortable' : 'fixed' }}
       </span>
       <button data-test="sort-priority" @click="$emit('sort', 'priority', 'desc')" />
+      <button data-test="sort-iq" @click="$emit('sort', 'iq_status', 'desc')" />
     </div>
   `
 }
@@ -66,6 +67,7 @@ function mountView() {
         RouterLink: { template: '<a><slot /></a>' },
         IQAccountSummary: true,
         IQBatchRun: true,
+        AccountOrderDialog: true,
         AppLayout: { template: '<div><slot /></div>' },
         TablePageLayout: {
           template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
@@ -108,6 +110,34 @@ describe('admin AccountsView IQ status column', () => {
     localStorage.clear()
     listAccounts.mockReset().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
     loadIQStates.mockReset().mockImplementation(() => ref({}))
+  })
+
+  it('requests server-side IQ sorting and restores it after refresh', async () => {
+    localStorage.setItem('account-table-sort', JSON.stringify({ key: 'iq_status', order: 'asc' }))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(listAccounts.mock.calls[0][2]).toMatchObject({ sort_by: 'iq_status', sort_order: 'asc' })
+    expect(wrapper.find('[data-column="iq_status"]').text()).toBe('sortable')
+    await wrapper.find('[data-test="sort-iq"]').trigger('click')
+    await flushPromises()
+    expect(listAccounts.mock.calls.at(-1)?.[2]).toMatchObject({ sort_by: 'iq_status', sort_order: 'desc' })
+    wrapper.unmount()
+  })
+
+  it('applies saved manual order and preserves it on a new visit', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.find('[data-test="manual-account-order"]').trigger('click')
+    wrapper.findComponent({ name: 'AccountOrderDialog' }).vm.$emit('saved')
+    await flushPromises()
+    expect(listAccounts.mock.calls.at(-1)?.[2]).toMatchObject({ sort_by: 'display_order', sort_order: 'asc' })
+    expect(JSON.parse(localStorage.getItem('account-table-sort')!)).toEqual({ key: 'display_order', order: 'asc' })
+    wrapper.unmount()
+    listAccounts.mockClear()
+    const restored = mountView()
+    await flushPromises()
+    expect(listAccounts.mock.calls[0][2]).toMatchObject({ sort_by: 'display_order', sort_order: 'asc' })
+    restored.unmount()
   })
 
   it('preserves the quality filter for list loads and selection across pages', async () => {

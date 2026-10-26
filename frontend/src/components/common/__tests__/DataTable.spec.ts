@@ -47,6 +47,22 @@ describe('DataTable', () => {
     localStorage.clear()
   })
 
+  it('persists a server manual sort without leaving a column arrow active', async () => {
+    const props = { columns: [{ key: 'name', label: 'Name', sortable: true }], data: [],
+      serverSideSort: true, extraSortKeys: ['display_order'], sortStorageKey: 'test-order', defaultSortKey: 'name' }
+    const wrapper = mount(DataTable, { props })
+    await wrapper.vm.$nextTick()
+    wrapper.vm.setSort('display_order', 'asc')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('th').attributes('aria-sort')).toBe('none')
+    expect(JSON.parse(localStorage.getItem('test-order')!)).toEqual({ key: 'display_order', order: 'asc' })
+    wrapper.unmount()
+    const restored = mount(DataTable, { props })
+    await restored.vm.$nextTick()
+    expect(restored.find('th').attributes('aria-sort')).toBe('none')
+    restored.unmount()
+  })
+
   it('renders paired sort arrows and highlights the active direction', async () => {
     const wrapper = mount(DataTable, {
       props: {

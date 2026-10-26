@@ -453,6 +453,8 @@ interface Props {
    * will emit 'sort' events instead of performing client-side sorting.
    */
   serverSideSort?: boolean
+  /** Server-defined sort modes without a visible column, e.g. a saved manual order. */
+  extraSortKeys?: string[]
   /** Emit 'rowClick' on row/card click and show pointer cursor (interactive cells should @click.stop) */
   clickableRows?: boolean
   /** Estimated row height in px for the virtualizer (default 56) */
@@ -500,6 +502,9 @@ const collator = new Intl.Collator(undefined, {
 
 const getSortableKeys = () => {
   const keys = new Set<string>()
+  if (props.serverSideSort) {
+    for (const key of props.extraSortKeys ?? []) keys.add(key)
+  }
   for (const col of props.columns) {
     if (col.sortable) keys.add(col.key)
   }
@@ -942,6 +947,10 @@ watch(
 )
 
 defineExpose({
+  setSort: (key: string, order: 'asc' | 'desc') => {
+    const normalized = normalizeSortKey(key)
+    if (normalized) applySortState({ key: normalized, order: normalizeSortOrder(order) })
+  },
   virtualizer: rowVirtualizer,
   shouldVirtualize,
   sortedData,

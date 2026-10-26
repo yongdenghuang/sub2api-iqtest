@@ -1,5 +1,14 @@
 export default {
   iqtest: {
+    accountOrder: {
+      button: 'Manual order', title: 'Reorder accounts',
+      hint: 'Drag the handle or use the arrows to arrange all accounts. The order persists across refreshes and pages without changing scheduling priority.',
+      drag: 'Drag to reorder', moveUp: 'Move {name} up', moveDown: 'Move {name} down',
+      save: 'Save and apply', saved: 'Account display order saved',
+      loadFailed: 'Could not load the account order. Please retry.',
+      saveFailed: 'Could not confirm the save. Reload the order before retrying.',
+      conflict: 'The accounts or their order changed. Reload before rearranging them.'
+    },
     updates: {
       managed: 'Managed IQTest updates',
       hint: 'Official stable releases are tested, backed up and deployed automatically. Updates stop on failure.',

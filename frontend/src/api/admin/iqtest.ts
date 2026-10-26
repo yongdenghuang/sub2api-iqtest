@@ -132,7 +132,18 @@ export interface IQDefaults {
 
 const base = '/admin/iqtest'
 
+export interface AccountDisplayOrder {
+  accounts: { id: number; name: string; platform: string }[]
+  revision: string
+}
+
 export const iqtestAPI = {
+  async accountOrder(): Promise<AccountDisplayOrder> {
+    return (await apiClient.get<AccountDisplayOrder>(`${base}/account-order`)).data
+  },
+  async saveAccountOrder(accountIds: number[], revision: string): Promise<void> {
+    await apiClient.put(`${base}/account-order`, { account_ids: accountIds, revision })
+  },
   async summary(): Promise<IQAccountSummary> {
     return (await apiClient.get<IQAccountSummary>(`${base}/summary`)).data
   },

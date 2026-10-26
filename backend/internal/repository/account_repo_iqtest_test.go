@@ -12,9 +12,52 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	dbaccount "github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/iqquality"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"
 )
+
+func TestAccountIQAndManualSortAcrossPages(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = db.Close() })
+	_, err = db.Exec(`CREATE TABLE accounts (id INTEGER PRIMARY KEY, name TEXT, deleted_at DATETIME);
+ CREATE TABLE iq_account_state (account_id INTEGER, kind TEXT, state TEXT);
+ CREATE TABLE iq_account_display_order (account_id INTEGER PRIMARY KEY, position INTEGER);
+ INSERT INTO accounts(id,name) VALUES (1,'b'),(2,'d'),(3,'c'),(4,'a'),(5,'e'),(6,'f'),(7,'g');
+ UPDATE accounts SET deleted_at=CURRENT_TIMESTAMP WHERE id=7;
+ INSERT INTO iq_account_state VALUES
+ (1,'candy','{"last_outcome":"pass"}'),(1,'pelican_svg','{"last_outcome":"quality_fail"}'),
+ (2,'candy','{"last_outcome":"quality_fail"}'),(2,'pelican_svg','{"last_outcome":"pass"}'),
+ (3,'candy','{"last_outcome":"infra_error"}'),(4,'candy','{"last_outcome":"skipped"}'),
+ (5,'pelican_svg','{"last_outcome":"quality_fail"}'),(7,'candy','{"last_outcome":"quality_fail"}');
+ INSERT INTO iq_account_display_order VALUES (2,1),(1,2),(5,3);`)
+	require.NoError(t, err)
+	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.SQLite, db)))
+	for _, tc := range []struct {
+		key, direction string
+		want           []int64
+	}{
+		{"iq_status", "asc", []int64{2, 1, 3, 4, 5, 6}},
+		{"iq_status", "desc", []int64{1, 2, 3, 4, 5, 6}},
+		{"display_order", "asc", []int64{2, 1, 5, 4, 3, 6}},
+	} {
+		t.Run(tc.key+tc.direction, func(t *testing.T) {
+			q := client.Account.Query().Where(dbaccount.DeletedAtIsNil())
+			for _, order := range accountListOrder(pagination.PaginationParams{SortBy: tc.key, SortOrder: tc.direction}) {
+				q = q.Order(order)
+			}
+			var got []int64
+			for page := 0; page < 3; page++ {
+				ids, err := q.Clone().Limit(2).Offset(page * 2).IDs(context.Background())
+				require.NoError(t, err)
+				got = append(got, ids...)
+			}
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
 
 func TestIQQualityFilterBeforePagination(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")

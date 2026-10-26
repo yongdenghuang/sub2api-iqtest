@@ -1175,6 +1175,9 @@ func (r *accountRepository) ListOpsAccountsForStats(ctx context.Context, platfor
 func accountListOrder(params pagination.PaginationParams) []func(*entsql.Selector) {
 	sortBy := strings.ToLower(strings.TrimSpace(params.SortBy))
 	sortOrder := params.NormalizedSortOrder(pagination.SortOrderAsc)
+	if order, ok := accountCustomListOrder(sortBy, sortOrder); ok {
+		return order
+	}
 	if sortBy == "upstream_billing_rate" {
 		direction := "ASC"
 		tieOrder := entsql.Asc

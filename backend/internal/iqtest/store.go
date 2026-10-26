@@ -90,6 +90,11 @@ var migrations = []string{
 		created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 	);
 	CREATE INDEX IF NOT EXISTS iq_events_idx ON iq_events (id DESC);`,
+	`CREATE TABLE IF NOT EXISTS iq_account_display_order (
+		account_id BIGINT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+		position BIGINT NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS iq_account_display_order_position_idx ON iq_account_display_order (position, account_id);`,
 }
 
 const migrationLockKey = 7392011

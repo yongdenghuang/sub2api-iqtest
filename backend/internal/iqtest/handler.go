@@ -18,6 +18,8 @@ func (s *Service) RegisterRoutes(v1 *gin.RouterGroup, mw ...gin.HandlerFunc) {
 	g := v1.Group("/admin/iqtest", mw...)
 	g.GET("/defaults", s.getDefaults)
 	g.GET("/summary", s.accountSummary)
+	g.GET("/account-order", s.getAccountOrder)
+	g.PUT("/account-order", s.saveAccountOrder)
 
 	g.GET("/plans", s.listPlans)
 	g.POST("/plans", s.createPlan)

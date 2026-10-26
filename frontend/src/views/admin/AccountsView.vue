@@ -21,6 +21,14 @@
           >
             <template #after>
               <RouterLink to="/admin/iqtest?tab=plans" class="btn btn-secondary">{{ t('iqtest.tabs.plans') }}</RouterLink>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                :aria-pressed="sortState.sort_by === 'display_order'"
+                :class="{ 'text-primary-600 ring-1 ring-primary-400': sortState.sort_by === 'display_order' }"
+                data-test="manual-account-order"
+                @click="showAccountOrder = true"
+              >{{ t('iqtest.accountOrder.button') }}</button>
               <div
                 class="account-density-control hidden lg:inline-flex"
                 role="group"
@@ -216,6 +224,7 @@
           @toggle-schedulable="handleBulkToggleSchedulable"
         />
         <IQBatchRun ref="iqBatchRef" @updated="handleIQUpdated" />
+        <AccountOrderDialog v-if="showAccountOrder" @close="showAccountOrder = false" @saved="applyManualAccountOrder" />
         <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable
           ref="dataTableRef"
@@ -224,6 +233,7 @@
           :loading="loading"
           row-key="id"
           :server-side-sort="true"
+          :extra-sort-keys="['display_order']"
           @sort="handleSort"
           default-sort-key="name"
           default-sort-order="asc"
@@ -537,6 +547,7 @@ import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
+import AccountOrderDialog from './iqtest/AccountOrderDialog.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -594,6 +605,7 @@ const accountTableRef = ref<HTMLElement | null>(null)
 const dataTableRef = ref<InstanceType<typeof DataTable> | null>(null)
 const iqRefreshToken = ref(0)
 const iqBatchRef = ref<InstanceType<typeof IQBatchRun> | null>(null)
+const showAccountOrder = ref(false)
 const handleIQUpdated = () => { void load().catch(() => {}) }
 
 const accountDensities = ['compact', 'standard'] as const
@@ -757,6 +769,8 @@ const ACCOUNT_SORTABLE_KEYS = new Set([
   'id',
   'name',
   'status',
+  'iq_status',
+  'display_order',
   'schedulable',
   'priority',
   'rate_multiplier',
@@ -1437,6 +1451,17 @@ const handleSort = (key: string, order: AccountSortOrder) => {
   load()
 }
 
+const applyManualAccountOrder = () => {
+  showAccountOrder.value = false
+  dataTableRef.value?.setSort?.('display_order', 'asc')
+  try {
+    localStorage.setItem(ACCOUNT_SORT_STORAGE_KEY, JSON.stringify({ key: 'display_order', order: 'asc' }))
+  } catch {
+    // The server has saved the order; blocked browser storage must not prevent applying it.
+  }
+  handleSort('display_order', 'asc')
+}
+
 watch(loading, (isLoading, wasLoading) => {
   if (wasLoading && !isLoading) {
     iqRefreshToken.value++
@@ -1901,7 +1926,7 @@ const allColumns = computed(() => {
     { key: 'platform_type', label: t('admin.accounts.columns.platformType'), sortable: false },
     { key: 'capacity', label: t('admin.accounts.columns.capacity'), sortable: false },
     { key: 'status', label: t('admin.accounts.columns.status'), sortable: true },
-    { key: 'iq_status', label: t('iqtest.intelligence.title'), sortable: false },
+    { key: 'iq_status', label: t('iqtest.intelligence.title'), sortable: true },
     { key: 'iqtest', label: t('iqtest.column.title'), sortable: false },
     { key: 'schedulable', label: t('admin.accounts.columns.schedulable'), sortable: true },
     { key: 'today_stats', label: t('admin.accounts.columns.todayStats'), sortable: false }
