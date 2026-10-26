@@ -56,8 +56,8 @@ func loadAccountOrder(ctx context.Context, q accountOrderQuery, lock bool) (*acc
 			return nil, err
 		}
 		result.Accounts = append(result.Accounts, a)
-		ids.WriteString(strconv.FormatInt(a.ID, 10))
-		ids.WriteByte(',')
+		_, _ = ids.WriteString(strconv.FormatInt(a.ID, 10))
+		_ = ids.WriteByte(',')
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

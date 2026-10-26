@@ -40,21 +40,23 @@ func TestSaveAccountOrderAtomicAndConcurrentChanges(t *testing.T) {
 				mock.ExpectExec("INSERT INTO iq_account_display_order").WillReturnError(errors.New("write failed"))
 				mock.ExpectRollback()
 			default:
-				if scenario == "stale" {
+				switch scenario {
+				case "stale":
 					expected = "stale"
-				} else if scenario == "missing" {
+				case "missing":
 					ids = []int64{1}
-				} else {
+				default:
 					ids = []int64{2, 3}
 				}
 				mock.ExpectRollback()
 			}
 			err = (&Store{db: db}).saveAccountOrder(context.Background(), ids, expected)
-			if scenario == "save" {
+			switch scenario {
+			case "save":
 				require.NoError(t, err)
-			} else if scenario == "stale" {
+			case "stale":
 				require.ErrorIs(t, err, errAccountOrderConflict)
-			} else {
+			default:
 				require.Error(t, err)
 			}
 			require.NoError(t, mock.ExpectationsWereMet())
