@@ -46,6 +46,21 @@ describe('batch IQ testing', () => {
     expect(iqtestAPI.getRun).toHaveBeenCalledTimes(2)
     wrapper.unmount()
   })
+  it('keeps a running batch visible and lets completed results be dismissed across reloads', async () => {
+    const wrapper = mount(IQBatchRun, { global: globalOptions })
+    await wrapper.vm.start([17])
+    expect(wrapper.find('[aria-label="iqtest.batch.dismiss"]').exists()).toBe(false)
+    vi.mocked(iqtestAPI.getRun).mockResolvedValue(run({ status: 'done', accounts: 1, pass: 2 }))
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+    expect(wrapper.get('progress').classes()).toContain('sr-only')
+    await wrapper.get('[aria-label="iqtest.batch.dismiss"]').trigger('click')
+    expect(wrapper.find('.iq-batch-strip').exists()).toBe(false)
+    expect(sessionStorage.getItem('iqtest-account-batch-run')).toBeNull()
+    expect(iqtestAPI.runAdHoc).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('restores progress after refresh and never resubmits when polling fails', async () => {
     sessionStorage.setItem('iqtest-account-batch-run','12')
     vi.mocked(iqtestAPI.getRun).mockRejectedValueOnce(new Error('offline'))

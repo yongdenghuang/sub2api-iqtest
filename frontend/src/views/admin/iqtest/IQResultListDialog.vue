@@ -1,52 +1,18 @@
 <template>
   <BaseDialog :show="show" :title="title" width="wide" @close="emit('close')">
-    <section v-if="selectedId !== null" class="mb-5 border-b border-gray-100 pb-5 dark:border-dark-700" :aria-busy="detailLoading">
+    <section v-if="selectedId !== null" class="mb-3" :aria-busy="detailLoading">
       <p v-if="detailLoading" class="py-6 text-center text-sm text-gray-500" role="status">{{ t('iqtest.result.loading') }}</p>
       <div v-else-if="detailError" class="space-y-2 text-sm">
         <p role="alert" class="text-red-600 dark:text-red-400">{{ detailError }}</p>
         <button type="button" class="btn btn-secondary btn-sm" @click="openResult(selectedId)">{{ t('iqtest.result.retry') }}</button>
       </div>
-      <IQResultDetail v-else-if="detail" :result="detail" />
+      <IQResultDetail v-else-if="detail" :result="detail">
+        <template v-if="detail.kind === 'pelican_svg'" #history>
+          <IQResultHistory :items="items" :loading="loading" :selected-id="selectedId" :recent="previewLatestSvg" @select="openResult" />
+        </template>
+      </IQResultDetail>
     </section>
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="text-left text-xs uppercase text-gray-500">
-          <tr>
-            <th class="px-3 py-2">{{ t('iqtest.result.time') }}</th>
-            <th class="px-3 py-2">{{ t('iqtest.result.account') }}</th>
-            <th class="px-3 py-2">{{ t('iqtest.result.kind') }}</th>
-            <th class="px-3 py-2">{{ t('iqtest.result.outcome') }}</th>
-            <th class="px-3 py-2">{{ t('iqtest.result.reason') }}</th>
-            <th class="px-3 py-2">{{ t('iqtest.result.duration') }}</th>
-            <th class="px-3 py-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="r in items"
-            :key="r.id"
-            class="cursor-pointer border-t border-gray-100 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-700"
-            :class="{ 'bg-primary-50 dark:bg-primary-900/20': selectedId === r.id }"
-            @click="openResult(r.id)"
-          >
-            <td class="px-3 py-2 text-xs text-gray-500">{{ formatDateTime(r.created_at) }}</td>
-            <td class="px-3 py-2">{{ r.account_name }} <span class="text-xs text-gray-500">#{{ r.account_id }}</span></td>
-            <td class="px-3 py-2">{{ t(`iqtest.kind.${r.kind}`) }}</td>
-            <td class="px-3 py-2"><span class="badge" :class="resultClass(r)">{{ resultLabel(r) }}</span></td>
-            <td class="px-3 py-2 text-xs">{{ r.reason ? reasonLabel(r.reason) : '' }}</td>
-            <td class="px-3 py-2 text-xs text-gray-500">{{ (r.duration_ms / 1000).toFixed(1) }}s</td>
-            <td class="px-3 py-2 text-right">
-              <button type="button" class="btn btn-secondary btn-sm" :aria-pressed="selectedId === r.id" @click.stop="openResult(r.id)">
-                {{ t(r.kind === 'pelican_svg' ? 'iqtest.result.viewSvg' : 'iqtest.result.view') }}
-              </button>
-            </td>
-          </tr>
-          <tr v-if="!items.length">
-            <td colspan="7" class="px-3 py-6 text-center text-gray-500">{{ loading ? t('iqtest.result.loading') : t('iqtest.events.empty') }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <IQResultHistory v-if="!detail || detail.kind !== 'pelican_svg'" :items="items" :loading="loading" :selected-id="selectedId" :recent="previewLatestSvg" @select="openResult" />
     <slot name="footer" />
   </BaseDialog>
 </template>
@@ -55,12 +21,11 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { extractApiErrorMessage } from '@/utils/apiError'
-import { formatDateTime } from '@/utils/format'
 import iqtestAPI from '@/api/admin/iqtest'
 import type { IQResult } from '@/api/admin/iqtest'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import IQResultDetail from './IQResultDetail.vue'
-import { resultClass, useIQLabels } from './labels'
+import IQResultHistory from './IQResultHistory.vue'
 
 const props = defineProps<{
   show: boolean
@@ -71,7 +36,6 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
-const { resultLabel, reasonLabel } = useIQLabels()
 const selectedId = ref<number | null>(null)
 const detail = ref<IQResult | null>(null)
 const detailLoading = ref(false)

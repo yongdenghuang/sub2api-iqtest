@@ -1,30 +1,28 @@
 <template>
-  <section v-if="submitting || runId || error" class="mb-3 space-y-2 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs dark:border-primary-800 dark:bg-primary-900/20" aria-live="polite">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <span class="font-medium">{{ t('iqtest.batch.title') }}<template v-if="runId"> · #{{ runId }}</template></span>
-      <div class="flex items-center gap-2">
-        <span v-if="submitting">{{ t('iqtest.batch.submitting') }}</span>
-        <template v-else-if="run">
-          <span>{{ statusLabel(run.status) }} · {{ t('iqtest.batch.progress', { done: completed, total: run.accounts * 2 }) }}</span>
-          <button type="button" class="btn btn-secondary btn-sm" @click="openResults">{{ t('iqtest.result.view') }}</button>
-        </template>
-        <RouterLink to="/admin/iqtest?tab=runs" class="text-primary-700 dark:text-primary-300">{{ t('iqtest.tabs.runs') }}</RouterLink>
+  <section v-if="submitting || runId || error" class="iq-batch-strip border-b border-primary-100 bg-primary-50 px-2 py-1 text-xs dark:border-primary-800 dark:bg-primary-900/20" aria-live="polite">
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span class="font-medium" :title="t('iqtest.batch.hint')">{{ t('iqtest.batch.title') }}<template v-if="runId"> #{{ runId }}</template></span>
+      <span v-if="submitting">{{ t('iqtest.batch.submitting') }}</span>
+      <template v-else-if="run">
+        <span>{{ statusLabel(run.status) }} · {{ t('iqtest.batch.progress', { done: completed, total: run.accounts * 2 }) }}</span>
+        <span class="text-green-700 dark:text-green-400">{{ t('iqtest.outcome.pass') }} {{ run.pass }}</span>
+        <span class="text-red-600">{{ t('iqtest.batch.failed') }} {{ run.quality_fail }}</span>
+        <span class="text-amber-700 dark:text-amber-400">{{ t('iqtest.batch.errors') }} {{ run.infra_error }}</span>
+        <span class="text-gray-500">{{ t('iqtest.batch.skipped') }} {{ run.skipped }}</span>
+      </template>
+      <div class="ml-auto flex items-center gap-2">
+        <button v-if="run" type="button" class="btn btn-secondary btn-sm" @click="openResults">{{ t('iqtest.result.view') }}</button>
+        <RouterLink to="/admin/iqtest?tab=runs" class="text-primary-700 dark:text-primary-300">{{ t('iqtest.accountTools.history') }}</RouterLink>
+        <button v-if="!busy" type="button" class="rounded p-1 text-gray-500 hover:bg-primary-100 dark:hover:bg-primary-900" :aria-label="t('iqtest.batch.dismiss')" :title="t('iqtest.batch.dismiss')" @click="dismiss">
+          <Icon name="x" size="sm" />
+        </button>
       </div>
     </div>
-    <template v-if="run">
-      <progress class="h-1.5 w-full accent-teal-600" :value="completed" :max="Math.max(1, run.accounts * 2)" :aria-label="t('iqtest.batch.title')" />
-      <div class="flex flex-wrap gap-x-4 gap-y-1">
-        <span class="text-green-700 dark:text-green-400">{{ t('iqtest.outcome.pass') }} {{ run.pass }}</span>
-        <span class="text-red-600">{{ t('iqtest.outcome.quality_fail') }} {{ run.quality_fail }}</span>
-        <span class="text-amber-700 dark:text-amber-400">{{ t('iqtest.filter.infra_error') }} {{ run.infra_error }}</span>
-        <span class="text-gray-500">{{ t('iqtest.outcome.skipped') }} {{ run.skipped }}</span>
-      </div>
-    </template>
-    <div v-if="error" class="flex flex-wrap items-center gap-2 text-red-600" role="alert">
+    <progress v-if="run" :class="busy ? 'mt-1 block h-1 w-full accent-teal-600' : 'sr-only'" :value="completed" :max="Math.max(1, run.accounts * 2)" :aria-label="t('iqtest.batch.title')" />
+    <div v-if="error" class="flex flex-wrap items-center gap-2 py-1 text-red-600" role="alert">
       <span>{{ error }}</span>
       <button v-if="runId" type="button" class="underline" @click="poll">{{ t('iqtest.batch.retryProgress') }}</button>
     </div>
-    <p v-if="busy" class="text-gray-500">{{ t('iqtest.batch.hint') }}</p>
   </section>
   <IQResultListDialog :show="showResults" :title="`${t('iqtest.batch.title')} #${runId}`" :items="results" :loading="resultsLoading" @close="showResults = false">
     <template #footer>
@@ -42,6 +40,7 @@ import { DEFAULT_TEST_MODEL } from '@/constants/accountTestModel'
 import iqtestAPI, { type IQResult, type IQRun } from '@/api/admin/iqtest'
 import IQResultListDialog from './IQResultListDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { useIQLabels } from './labels'
 const emit = defineEmits<{ updated: [] }>()
@@ -64,6 +63,16 @@ let timer: ReturnType<typeof setTimeout> | undefined
 let disposed = false
 let polling = false
 let resultsSequence = 0
+function dismiss() {
+  if (busy.value) return
+  clearTimeout(timer)
+  runId.value = null
+  run.value = null
+  error.value = ''
+  showResults.value = false
+  resultsSequence++
+  try { sessionStorage.removeItem(storageKey) } catch { /* optional */ }
+}
 function remember(id: number) {
   try { sessionStorage.setItem(storageKey, String(id)) } catch { /* storage may be disabled */ }
 }

@@ -1,5 +1,5 @@
 <template>
-  <div class="inline-flex flex-col gap-0.5 text-xs font-medium">
+  <div class="inline-flex flex-col gap-0.5 text-xs font-medium" :class="{ 'platform-badge-compact': compact }">
     <!-- Row 1: Platform + Type -->
     <div class="inline-flex items-center overflow-hidden rounded-md">
       <span :class="['inline-flex items-center gap-1 px-2 py-1', platformClass]">
@@ -58,8 +58,9 @@
       </span>
     </div>
     <!-- Row 3: Subscription expiration (non-free paid accounts only) -->
-    <div v-if="expiresLabel" class="text-[10px] leading-tight text-gray-400 dark:text-gray-500 pl-0.5" :title="subscriptionExpiresAt">
-      {{ expiresLabel }}
+    <div v-if="expiresLabel || $slots.meta" class="flex flex-wrap items-center gap-x-2 text-[10px] leading-tight text-gray-400 dark:text-gray-500 pl-0.5">
+      <span v-if="expiresLabel" :title="subscriptionExpiresAt">{{ compact ? expiresLabel.replace(/\d{4}-/, '') : expiresLabel }}</span>
+      <slot name="meta" />
     </div>
   </div>
 </template>
@@ -82,6 +83,7 @@ interface Props {
   authMode?: string
   planType?: string
   privacyMode?: string
+  compact?: boolean
   subscriptionExpiresAt?: string
 }
 
@@ -320,3 +322,13 @@ const privacyBadge = computed(() => {
   }
 })
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .platform-badge-compact > div > span.inline-flex {
+    padding-top: 1px;
+    padding-bottom: 1px;
+    line-height: 16px;
+  }
+}
+</style>

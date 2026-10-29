@@ -8,7 +8,7 @@
         {{ t('admin.accounts.bulkActions.selected', { count: selectedIds.length }) }}
       </span>
       <span v-else class="text-sm font-medium text-primary-900 dark:text-primary-100">
-        {{ t('admin.accounts.bulkEdit.title') }}
+        {{ t('iqtest.accountTools.bulk') }}
       </span>
       <template v-if="selectedIds.length > 0">
         <button

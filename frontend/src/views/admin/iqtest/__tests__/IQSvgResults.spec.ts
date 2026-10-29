@@ -41,7 +41,7 @@ describe('account SVG results', () => {
     const wrapper = mount(IQAccountCell, { props: { states: [state] }, global: globalOptions })
     await wrapper.get('button').trigger('click')
     await flushPromises()
-    expect(iqtestAPI.listAccountResults).toHaveBeenCalledWith(102, 'pelican_svg', 100)
+    expect(iqtestAPI.listAccountResults).toHaveBeenCalledWith(102, 'pelican_svg', 5)
     expect(iqtestAPI.getResult).toHaveBeenLastCalledWith(12)
     expect(imageSource(wrapper)).toContain('fill="red"')
     await wrapper.findAll('tbody tr')[1].trigger('click')
@@ -54,6 +54,20 @@ describe('account SVG results', () => {
     await wrapper.findAll('tbody tr')[0].get('button').trigger('click')
     await flushPromises()
     expect(iqtestAPI.getResult).toHaveBeenCalledTimes(previousCalls + 1)
+    wrapper.unmount()
+  })
+
+  it('places the picture before five recent results and the evaluation last', async () => {
+    const items = Array.from({ length: 7 }, (_, index) => result(12 - index))
+    const wrapper = mount(IQResultListDialog, { props: { show: true, title: 'SVG', items, loading: false, previewLatestSvg: true }, global: globalOptions })
+    await flushPromises()
+    expect(wrapper.findAll('[data-iq-history] tbody tr')).toHaveLength(5)
+    const preview = wrapper.get('[data-iq-preview]').element
+    const history = wrapper.get('[data-iq-history]').element
+    const evaluation = wrapper.get('[data-iq-evaluation]').element
+    expect(preview.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(history.compareDocumentPosition(evaluation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(evaluation.parentElement?.lastElementChild).toBe(evaluation)
     wrapper.unmount()
   })
 

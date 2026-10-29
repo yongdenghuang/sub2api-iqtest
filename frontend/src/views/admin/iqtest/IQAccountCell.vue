@@ -74,7 +74,7 @@ async function openHistory(s: IQStateRow) {
   showList.value = true
   listLoading.value = true
   try {
-    const items = await iqtestAPI.listAccountResults(s.account_id, s.kind, 100)
+    const items = await iqtestAPI.listAccountResults(s.account_id, s.kind, s.kind === 'pelican_svg' ? 5 : 100)
     if (request === historyRequest) listItems.value = items
   } catch (e) {
     if (request === historyRequest) appStore.showError(extractApiErrorMessage(e, t('iqtest.common.loadFailed')))

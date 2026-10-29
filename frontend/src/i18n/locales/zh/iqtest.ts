@@ -1,5 +1,6 @@
 export default {
   iqtest: {
+    accountTools: { plans: '计划', order: '排序', auto: '自动', more: '更多', add: '添加', platform: '平台', type: '类型', status: '状态', privacy: '隐私', group: '分组', quality: '质量', history: '记录', bulk: '批量操作' },
     visual: {
       title: '视觉评分标准', score: '视觉评分', passed: '视觉通过', failed: '不合格', unreviewed: '未视觉审核',
       reviewFailed: '审核失败', reviewer: '评审账号',
@@ -25,15 +26,16 @@ export default {
       open: '查看更新记录'
     },
     overview: {
-      total: '全部 {count} 个账号', quality: '{count} 个质量异常', request: '{count} 个请求异常',
+      total: '账号 {count}', quality: '质量异常 {count}', request: '请求异常 {count}',
       note: '全局统计 · 质量异常只标记，不自动停用',
       hint: '按糖果 / 鹈鹕最新结果归类：质量失败优先于请求异常；跳过不作质量结论；不受列表筛选影响。',
       failed: '统计加载失败'
     },
     filter: { all: '全部质量状态', quality_fail: '质量异常', infra_error: '请求异常', normal: '质量正常', untested: '尚未测试 / 已跳过' },
     batch: {
-      button: '批量智商测试', title: '糖果 + 鹈鹕 SVG 批量测试', running: '智商测试中…', submitting: '正在提交…',
-      progress: '已完成 {done} / {total} 项', hint: '任务在后台执行，刷新页面后可继续查看。每个账号执行两项测试；鹈鹕生成后另用可用 OpenAI 账号的 GPT-6 Astra 看图评分，额外调用一次模型。没有独立评审账号时不会判通过。',
+      dismiss: '收起结果', failed: '失败', errors: '异常', skipped: '跳过',
+      button: '智商测试', title: '批量测试', running: '智商测试中…', submitting: '正在提交…',
+      progress: '{done}/{total}', hint: '任务在后台执行，刷新页面后可继续查看。每个账号执行两项测试；鹈鹕生成后另用可用 OpenAI 账号的 GPT-6 Astra 看图评分，额外调用一次模型。没有独立评审账号时不会判通过。',
       submitFailed: '未能确认任务是否已提交，请先查看运行记录，避免重复测试。',
       progressFailed: '获取进度失败；后台任务不会因此取消。', retryProgress: '刷新进度'
     },
@@ -143,6 +145,7 @@ export default {
       statuses: { running: '运行中', done: '完成', aborted: '中止' }
     },
     result: {
+      recentFive: '最近 5 次结果',
       viewSvg: '查看 SVG',
       noSvg: '这次测试没有可预览的完整 SVG，请查看结果原因或模型输出。',
       svgLoadFailed: '这次 SVG 无法渲染，请展开模型输出查看原文。',

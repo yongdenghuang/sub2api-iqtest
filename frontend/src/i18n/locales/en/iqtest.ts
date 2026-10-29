@@ -1,5 +1,6 @@
 export default {
   iqtest: {
+    accountTools: { plans: 'Plans', order: 'Order', auto: 'Auto', more: 'More', add: 'Add', platform: 'Platform', type: 'Type', status: 'Status', privacy: 'Privacy', group: 'Group', quality: 'Quality', history: 'History', bulk: 'Bulk actions' },
     visual: {
       title: 'Visual scoring rubric', score: 'Visual score', passed: 'Visually passed', failed: 'Failed', unreviewed: 'Not visually reviewed',
       reviewFailed: 'Review failed', reviewer: 'Reviewer account',
@@ -32,8 +33,9 @@ export default {
     },
     filter: { all: 'All quality states', quality_fail: 'Quality issues', infra_error: 'Request issues', normal: 'Quality normal', untested: 'Untested / skipped' },
     batch: {
-      button: 'Batch IQ test', title: 'Candy + pelican SVG batch test', running: 'IQ tests running…', submitting: 'Submitting…',
-      progress: '{done} / {total} checks completed', hint: 'Runs in the background and survives page refresh. Each account gets both checks. Pelican images require one additional GPT-6 Astra vision call through a separate available OpenAI account. Without a separate reviewer, no pass is awarded.',
+      dismiss: 'Dismiss results', failed: 'Failed', errors: 'Errors', skipped: 'Skipped',
+      button: 'IQ test', title: 'Batch test', running: 'IQ tests running…', submitting: 'Submitting…',
+      progress: '{done}/{total}', hint: 'Runs in the background and survives page refresh. Each account gets both checks. Pelican images require one additional GPT-6 Astra vision call through a separate available OpenAI account. Without a separate reviewer, no pass is awarded.',
       submitFailed: 'Could not confirm submission. Check run history before retrying to avoid duplicate tests.',
       progressFailed: 'Could not fetch progress. The background run is not cancelled.', retryProgress: 'Refresh progress'
     },
@@ -143,6 +145,7 @@ export default {
       statuses: { running: 'Running', done: 'Done', aborted: 'Aborted' }
     },
     result: {
+      recentFive: 'Latest 5 results',
       viewSvg: 'View SVG',
       noSvg: 'This test has no complete SVG to preview. Check the result reason or model output.',
       svgLoadFailed: 'This SVG could not be rendered. Expand the model output to inspect it.',

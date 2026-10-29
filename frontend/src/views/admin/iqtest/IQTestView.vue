@@ -414,7 +414,7 @@
       </template>
     </BaseDialog>
 
-    <IQResultListDialog :show="showList" :title="listTitle" :items="listItems" :loading="listLoading" @close="showList = false" />
+    <IQResultListDialog :show="showList" :title="listTitle" :items="listItems" :loading="listLoading" :preview-latest-svg="previewLatestSvg" @close="showList = false" />
 
     <ConfirmDialog
       :show="!!toDelete"
@@ -774,8 +774,10 @@ const showList = ref(false)
 const listTitle = ref('')
 const listItems = ref<IQResult[]>([])
 const listLoading = ref(false)
+const previewLatestSvg = ref(false)
 
 async function openRun(r: IQRun) {
+  previewLatestSvg.value = false
   listTitle.value = `${t('iqtest.run.detail')} #${r.id}`
   listItems.value = []
   showList.value = true
@@ -790,12 +792,13 @@ async function openRun(r: IQRun) {
 }
 
 async function openAccountHistory(s: IQStateRow) {
+  previewLatestSvg.value = s.kind === 'pelican_svg'
   listTitle.value = `${s.account_name} #${s.account_id} · ${t(`iqtest.kind.${s.kind}`)}`
   listItems.value = []
   showList.value = true
   listLoading.value = true
   try {
-    listItems.value = await iqtestAPI.listAccountResults(s.account_id, s.kind, 100)
+    listItems.value = await iqtestAPI.listAccountResults(s.account_id, s.kind, s.kind === 'pelican_svg' ? 5 : 100)
   } catch (e) {
     fail(e)
   } finally {
