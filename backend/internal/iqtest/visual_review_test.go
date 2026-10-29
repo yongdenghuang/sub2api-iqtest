@@ -15,6 +15,13 @@ import (
 
 const validVisualJSON = `{"pelican":{"score":23,"reason":"长喙和喉囊清楚，头颈连接完整"},"bicycle":{"score":23,"reason":"双轮、车架、车把、脚踏可辨"},"riding":{"score":26,"reason":"鸟坐车座，脚接触脚踏，翅膀扶车把"},"anatomy":{"score":9,"reason":"轮廓连贯"},"clarity":{"score":9,"reason":"主体完整"},"critical_errors":[],"confidence":"high","summary":"结构与骑乘关系清楚"}`
 
+func TestSVGShapeCountCannotReplaceVisualReview(t *testing.T) {
+	result := JudgeSVG(Capture{Complete: true, Success: true, Text: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M0 0L100 100"/></svg>`}, SVGOptions{MinShapes: 100, MinScore: 100})
+	require.Equal(t, OutcomeSkipped, result.Outcome)
+	require.Equal(t, ReasonVisualReviewRequired, result.Reason)
+	require.Zero(t, result.Score)
+}
+
 func TestVisualRubricGates(t *testing.T) {
 	v, score, pass, err := decodeVisualAssessment(validVisualJSON)
 	require.NoError(t, err)

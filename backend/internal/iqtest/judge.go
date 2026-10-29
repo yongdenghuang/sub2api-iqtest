@@ -63,7 +63,8 @@ func JudgeSVG(c Capture, opts SVGOptions) Result {
 		return res
 	}
 
-	opts.MinScore = 0 // Structural complexity is not a visual-quality gate.
+	opts.MinScore = 0  // Structural complexity is not a visual-quality gate.
+	opts.MinShapes = 1 // Even one complex path can be a complete drawing; vision decides.
 	r := CheckSVG(c.Text, opts)
 	res.Metrics = SVGReviewMetrics{EvaluationVersion: VisualRubricVersion, Static: r.Metrics, Requests: 1}
 	res.Output = r.SVG

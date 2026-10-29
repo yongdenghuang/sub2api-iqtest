@@ -5,7 +5,7 @@
       <span>{{ t(`iqtest.kind.${result.kind}`) }}</span>
       <span class="badge" :class="resultClass(result)">{{ resultLabel(result) }}</span>
       <span v-if="result.reason" class="text-xs text-gray-500">{{ reasonLabel(result.reason) }}</span>
-      <span v-if="review?.status === 'completed' && review.assessment" class="text-xs text-gray-500">{{ t('iqtest.visual.score') }}: {{ result.score }}</span>
+      <span v-if="review?.status === 'completed' && review.assessment" class="text-xs text-gray-500">{{ t('iqtest.visual.score') }}: {{ result.score ?? 0 }}</span>
     </div>
     <p class="text-xs text-gray-500">{{ formatDateTime(result.created_at) }} · #{{ result.id }}</p>
     <p v-if="result.detail" class="whitespace-pre-wrap break-words text-gray-600 dark:text-gray-300">{{ result.detail }}</p>
