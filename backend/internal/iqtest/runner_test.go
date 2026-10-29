@@ -84,8 +84,8 @@ func TestRunCheckPelican(t *testing.T) {
 		return nil
 	}}
 	res := RunCheck(context.Background(), f, 7, CheckConfig{Kind: TestPelicanSVG})
-	if res.Outcome != OutcomePass || res.Score < 60 {
-		t.Fatalf("want pass with score, got %s/%s score=%d", res.Outcome, res.Reason, res.Score)
+	if res.Outcome != OutcomeSkipped || res.Reason != ReasonVisualReviewRequired || res.Score != 0 {
+		t.Fatalf("want unreviewed without visual score, got %s/%s score=%d", res.Outcome, res.Reason, res.Score)
 	}
 }
 

@@ -129,3 +129,33 @@ describe('SVG image extraction', () => {
     wrapper.unmount()
   })
 })
+
+describe('visual quality verdicts', () => {
+  it('does not present a historical structural 100 as a visual pass', () => {
+    const wrapper = mount(IQResultDetail, { props: { result: { ...full[12], score: 100 } } })
+    expect(wrapper.text()).toContain(zh.iqtest.visual.unreviewed)
+    expect(wrapper.text()).toContain(zh.iqtest.visual.legacy)
+    expect(wrapper.get('.flex.flex-wrap').text()).not.toContain('100')
+    expect(wrapper.find('.badge-success').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('shows visual criteria and critical defects, even when the total is high', () => {
+    const assessment = {
+      pelican: { score: 23, reason: '头颈可辨' }, bicycle: { score: 23, reason: '实心块遮挡车架' },
+      riding: { score: 26, reason: '脚踏连接不清楚' }, anatomy: { score: 9, reason: '严重结构缺陷' },
+      clarity: { score: 9, reason: '主体完整' }, critical_errors: ['major_structure_error'], confidence: 'high', summary: '需要改进'
+    }
+    const wrapper = mount(IQResultDetail, { props: { result: { ...full[12], score: 90, outcome: 'quality_fail', reason: 'visual_mismatch', metrics: { evaluation_version: 'pelican-vision-v1', visual: { status: 'completed', model: 'gpt-6-astra', reviewer_account_id: 2, assessment } } } } })
+    expect(wrapper.text()).toContain('视觉评分: 90')
+    expect(wrapper.text()).toContain('实心块遮挡车架')
+    expect(wrapper.text()).toContain(zh.iqtest.visual.issues.major_structure_error)
+    expect(wrapper.find('.badge-danger').exists()).toBe(true)
+    wrapper.unmount()
+  })
+  it('does not show an unreviewed account row as normal or green history', () => {
+    const wrapper = mount(IQAccountCell, { props: { states: [{ ...state, last_outcome: 'skipped', last_reason: 'visual_review_required' }] }, global: globalOptions })
+    expect(wrapper.get('button').text()).toContain(zh.iqtest.visual.unreviewed)
+    expect(wrapper.find('.badge-success, .bg-green-500').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})

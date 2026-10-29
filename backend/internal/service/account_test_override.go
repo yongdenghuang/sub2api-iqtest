@@ -3,15 +3,16 @@ package service
 import "github.com/gin-gonic/gin"
 
 // AccountTestOverrideKey is the gin context key under which callers (the
-// iqtest package) pass a custom prompt and token budget to the account-test
-// pipeline. Only the Claude-protocol test path reads it; other paths already
-// take the prompt as an argument.
+// iqtest package) pass a custom prompt, Claude token budget, or OpenAI image
+// input to the account-test pipeline. HTTP request fields do not populate it.
 const AccountTestOverrideKey = "account_test_override"
 
-// AccountTestOverride customises the Claude-protocol account test request.
+// AccountTestOverride customises internal account test requests.
 type AccountTestOverride struct {
 	Prompt    string
 	MaxTokens int
+	// Internal IQ vision input; never populated from user request headers.
+	ImageDataURL string
 }
 
 // ApplyAccountTestOverride rewrites the user prompt and max_tokens of a test
@@ -41,4 +42,26 @@ func ApplyAccountTestOverride(c *gin.Context, payload map[string]any) {
 		return
 	}
 	content[0]["text"] = ov.Prompt
+}
+
+// ApplyAccountTestVisionInput adds the rendered PNG to an OpenAI test request.
+// Both text and actual image bytes are sent; an SVG source string is not vision input.
+func ApplyAccountTestVisionInput(c *gin.Context, payload map[string]any, chat bool) {
+	v, ok := c.Get(AccountTestOverrideKey)
+	if !ok {
+		return
+	}
+	ov, ok := v.(AccountTestOverride)
+	if !ok || ov.ImageDataURL == "" {
+		return
+	}
+	if chat {
+		payload["messages"] = []map[string]any{{"role": "user", "content": []map[string]any{
+			{"type": "text", "text": ov.Prompt}, {"type": "image_url", "image_url": map[string]any{"url": ov.ImageDataURL, "detail": "high"}},
+		}}}
+	} else {
+		payload["input"] = []map[string]any{{"role": "user", "content": []map[string]any{
+			{"type": "input_text", "text": ov.Prompt}, {"type": "input_image", "image_url": ov.ImageDataURL, "detail": "high"},
+		}}}
+	}
 }

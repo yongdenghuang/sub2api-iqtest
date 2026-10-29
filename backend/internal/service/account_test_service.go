@@ -900,6 +900,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 			"content": []map[string]any{{"type": "input_text", "text": prompt}},
 		}}
 	}
+	ApplyAccountTestVisionInput(c, payload, false)
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event once. A task-invalid Agent Identity response may
@@ -2142,6 +2143,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	c.Writer.Flush()
 
 	payload := createOpenAIChatCompletionsTestPayload(testModelID, prompt)
+	ApplyAccountTestVisionInput(c, payload, true)
 	payloadBytes, _ := json.Marshal(payload)
 
 	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})

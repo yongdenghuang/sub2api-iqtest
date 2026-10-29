@@ -9,8 +9,9 @@ type Result struct {
 	Reason     Reason   `json:"reason,omitempty"`
 	Detail     string   `json:"detail,omitempty"`
 	Output     string   `json:"output,omitempty"` // answer excerpt (candy) or extracted SVG
-	Score      int      `json:"score,omitempty"`  // SVG heuristic score
+	Score      int      `json:"score,omitempty"`  // visual rubric score; never the old structure heuristic
 	Metrics    any      `json:"metrics,omitempty"`
+	Requests   int      `json:"-"` // generation and review upstream requests
 	DurationMs int64    `json:"duration_ms"`
 }
 
@@ -62,15 +63,17 @@ func JudgeSVG(c Capture, opts SVGOptions) Result {
 		return res
 	}
 
+	opts.MinScore = 0 // Structural complexity is not a visual-quality gate.
 	r := CheckSVG(c.Text, opts)
-	res.Score, res.Metrics = r.Score, r.Metrics
+	res.Metrics = SVGReviewMetrics{EvaluationVersion: VisualRubricVersion, Static: r.Metrics, Requests: 1}
 	res.Output = r.SVG
 	if res.Output == "" {
 		res.Output = truncateRunes(visible, 2000)
 	}
 	switch {
 	case r.Passed:
-		res.Outcome = OutcomePass
+		res.Outcome, res.Reason = OutcomeSkipped, ReasonVisualReviewRequired
+		res.Detail = "SVG structure checked; visual review is required before a quality verdict"
 	case r.Failure == SVGFailUnclosed:
 		res.Outcome, res.Reason = OutcomeInfraError, ReasonTruncated
 		res.Detail = "svg not closed; reply was probably cut off by the token limit"

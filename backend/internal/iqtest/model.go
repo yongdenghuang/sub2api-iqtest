@@ -31,8 +31,10 @@ const (
 	ReasonNone Reason = ""
 
 	// quality_fail
-	ReasonAnswerMismatch Reason = "answer_mismatch"
-	ReasonSVGInvalid     Reason = "svg_invalid"
+	ReasonAnswerMismatch       Reason = "answer_mismatch"
+	ReasonSVGInvalid           Reason = "svg_invalid"
+	ReasonVisualMismatch       Reason = "visual_mismatch"
+	ReasonVisualReviewRequired Reason = "visual_review_required"
 
 	// infra_error: never counted as a quality failure
 	ReasonTimeout          Reason = "timeout"

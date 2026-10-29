@@ -1,5 +1,15 @@
 export default {
   iqtest: {
+    visual: {
+      title: '视觉评分标准', score: '视觉评分', passed: '视觉通过', failed: '不合格', unreviewed: '未视觉审核',
+      reviewFailed: '审核失败', reviewer: '评审账号',
+      standard: '鹈鹕 25 分、自行车 25 分、骑乘关系 30 分、轮廓完整性 10 分、可读性 10 分。总分至少 75，前三项至少 15 / 15 / 18，且无严重结构问题才能通过。AI 评分仍可能存在误判，可结合分项理由检查。',
+      legacy: '这条历史记录只做了 SVG 结构检查，尚未经过看图评分。旧结构分不代表画面质量，请重新运行鹈鹕测试获取视觉结果。',
+      reviewFailedHint: '视觉评审未成功完成，本次不判通过，也不据此认定账号质量异常。',
+      pelican: '鹈鹕辨识度', bicycle: '自行车结构', riding: '骑乘关系', anatomy: '轮廓完整性', clarity: '画面可读性',
+      issues: { pelican_missing: '无法辨认鹈鹕', bicycle_missing: '自行车关键结构缺失', not_riding: '骑乘关系不成立', major_structure_error: '严重错接、畸形或遮挡' }
+    },
+
     accountOrder: {
       button: '手动排序', title: '调整账号显示顺序',
       hint: '拖动左侧手柄，或用上下按钮调整全部账号。保存后刷新、分页仍保留顺序；不影响调度优先级。',
@@ -23,7 +33,7 @@ export default {
     filter: { all: '全部质量状态', quality_fail: '质量异常', infra_error: '请求异常', normal: '质量正常', untested: '尚未测试 / 已跳过' },
     batch: {
       button: '批量智商测试', title: '糖果 + 鹈鹕 SVG 批量测试', running: '智商测试中…', submitting: '正在提交…',
-      progress: '已完成 {done} / {total} 项', hint: '任务在后台执行，刷新页面后可继续查看。每个账号执行两项测试，不可用的账号会记录跳过原因。',
+      progress: '已完成 {done} / {total} 项', hint: '任务在后台执行，刷新页面后可继续查看。每个账号执行两项测试；鹈鹕生成后另用可用 OpenAI 账号的 GPT-6 Astra 看图评分，额外调用一次模型。没有独立评审账号时不会判通过。',
       submitFailed: '未能确认任务是否已提交，请先查看运行记录，避免重复测试。',
       progressFailed: '获取进度失败；后台任务不会因此取消。', retryProgress: '刷新进度'
     },
@@ -40,7 +50,9 @@ export default {
     state: { normal: '正常', suspect: '可疑', flagged: '已标记' },
     reason: {
       answer_mismatch: '答案不对',
-      svg_invalid: 'SVG 不合格',
+      svg_invalid: 'SVG 结构不合格',
+      visual_mismatch: '视觉质量不合格',
+      visual_review_required: '需要看图评分',
       timeout: '超时',
       rate_limited: '限流',
       quota_exhausted: '额度不足',

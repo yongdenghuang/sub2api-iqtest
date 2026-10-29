@@ -73,9 +73,13 @@ func RunCheck(ctx context.Context, tester AccountTester, accountID int64, cfg Ch
 	})
 	switch cfg.Kind {
 	case TestCandy:
-		return JudgeCandy(out, cfg.CandyMode)
+		r := JudgeCandy(out, cfg.CandyMode)
+		r.Requests = 1
+		return r
 	case TestPelicanSVG:
-		return JudgeSVG(out, cfg.SVG)
+		r := JudgeSVG(out, cfg.SVG)
+		r.Requests = 1
+		return r
 	}
 	return Result{
 		Kind:    cfg.Kind,

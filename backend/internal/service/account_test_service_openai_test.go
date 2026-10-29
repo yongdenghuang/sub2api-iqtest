@@ -728,3 +728,31 @@ func TestAccountTestService_OpenAIAstraDefaultPreservesQualityPrompt(t *testing.
 		})
 	}
 }
+
+func TestAccountTestService_OpenAIVisionSendsImageToBothProtocols(t *testing.T) {
+	const imageURL = "data:image/png;base64,iVBORw0KGgo="
+	for _, chat := range []bool{false, true} {
+		t.Run(fmt.Sprintf("chat=%t", chat), func(t *testing.T) {
+			ctx, _ := newTestContext()
+			ctx.Set(AccountTestOverrideKey, AccountTestOverride{Prompt: "Judge the actual picture", ImageDataURL: imageURL})
+			response := "data: {\"type\":\"response.completed\"}\n\n"
+			account := &Account{ID: 90, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1, Credentials: map[string]any{"access_token": "test-token"}}
+			if chat {
+				account.Type = AccountTypeAPIKey
+				account.Credentials = map[string]any{"api_key": "sk-test", "base_url": "https://compat-upstream.example/v1"}
+				account.Extra = map[string]any{openai_compat.ExtraKeyResponsesSupported: false}
+				response = "data: {\"choices\":[{\"delta\":{\"content\":\"review\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+			}
+			upstream := &httpUpstreamRecorder{resp: newJSONResponse(http.StatusOK, response)}
+			svc := &AccountTestService{httpUpstream: upstream, cfg: &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}}}
+			require.NoError(t, svc.testOpenAIAccountConnection(ctx, account, "gpt-6-astra", "Judge the actual picture", ""))
+			path := "input.0.content"
+			imagePath := ".1.image_url"
+			if chat {
+				path, imagePath = "messages.0.content", ".1.image_url.url"
+			}
+			require.Equal(t, imageURL, gjson.GetBytes(upstream.lastBody, path+imagePath).String())
+			require.Equal(t, "Judge the actual picture", gjson.GetBytes(upstream.lastBody, path+".0.text").String())
+		})
+	}
+}

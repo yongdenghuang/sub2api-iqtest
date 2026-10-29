@@ -95,6 +95,21 @@ var migrations = []string{
 		position BIGINT NOT NULL
 	);
 	CREATE INDEX IF NOT EXISTS iq_account_display_order_position_idx ON iq_account_display_order (position, account_id);`,
+	`-- Historical static passes are not visual quality verdicts.
+ WITH legacy AS (
+  UPDATE iq_results SET outcome='skipped', reason='visual_review_required', score=0,
+   metrics=COALESCE(NULLIF(metrics,'null'::jsonb),'{}'::jsonb) || jsonb_build_object('legacy_structure_score',score,'requests',1),
+   detail='Historical SVG structure check only; visual review required'
+  WHERE kind='pelican_svg' AND outcome='pass'
+   AND COALESCE(metrics->>'evaluation_version','') <> 'pelican-vision-v1'
+  RETURNING run_id
+ ), counts AS (SELECT run_id,COUNT(*) AS n FROM legacy GROUP BY run_id)
+ UPDATE iq_runs SET pass=GREATEST(0,pass-counts.n), skipped=skipped+counts.n FROM counts WHERE iq_runs.id=counts.run_id;
+ UPDATE iq_account_state SET flagged=false, state=state || jsonb_build_object(
+  'state','normal','consecutive_fails',0,'consecutive_passes',0,'recent','[]'::jsonb,'flagged_at',NULL,
+  'last_outcome',CASE WHEN state->>'last_outcome'='pass' THEN 'skipped' ELSE state->>'last_outcome' END,
+  'last_reason',CASE WHEN state->>'last_outcome'='pass' THEN 'visual_review_required' ELSE COALESCE(state->>'last_reason','') END
+ ) WHERE kind='pelican_svg';`,
 }
 
 const migrationLockKey = 7392011
@@ -353,7 +368,7 @@ func (s *Store) GetRun(ctx context.Context, id int64) (*Run, error) {
 	}
 	if err == nil && r.Status == "running" {
 		err = s.db.QueryRowContext(ctx, `SELECT
-   COUNT(*) FILTER (WHERE outcome <> 'skipped'), COUNT(*) FILTER (WHERE outcome = 'pass'),
+   COALESCE(SUM(COALESCE((metrics->>'requests')::int, CASE WHEN outcome <> 'skipped' THEN 1 ELSE 0 END)),0), COUNT(*) FILTER (WHERE outcome = 'pass'),
    COUNT(*) FILTER (WHERE outcome = 'quality_fail'), COUNT(*) FILTER (WHERE outcome = 'infra_error'),
    COUNT(*) FILTER (WHERE outcome = 'skipped') FROM iq_results WHERE run_id = $1`, id).
 			Scan(&r.Requests, &r.Pass, &r.QualityFail, &r.InfraError, &r.Skipped)

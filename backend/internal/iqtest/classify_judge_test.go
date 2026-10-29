@@ -103,7 +103,7 @@ func TestJudgeSVG(t *testing.T) {
 		outcome Outcome
 		reason  Reason
 	}{
-		{"pass", okCapture("```svg\n" + goodSVG + "\n```"), OutcomePass, ""},
+		{"static only", okCapture("```svg\n" + goodSVG + "\n```"), OutcomeSkipped, ReasonVisualReviewRequired},
 		{"no svg", okCapture("我画不出来"), OutcomeQualityFail, ReasonSVGInvalid},
 		{"unsafe", okCapture(`<svg viewBox="0 0 1 1"><script>x()</script></svg>`), OutcomeQualityFail, ReasonSVGInvalid},
 		{"unclosed is truncation", okCapture(`<svg viewBox="0 0 10 10">` + shapes(10)), OutcomeInfraError, ReasonTruncated},
@@ -118,7 +118,7 @@ func TestJudgeSVG(t *testing.T) {
 		})
 	}
 	pass := JudgeSVG(okCapture(goodSVG), SVGOptions{})
-	if pass.Score < 60 || pass.Output == "" {
+	if pass.Score != 0 || pass.Output == "" {
 		t.Fatalf("expected score and extracted svg, got score=%d len=%d", pass.Score, len(pass.Output))
 	}
 }

@@ -11,9 +11,9 @@
       @click="openHistory(s)"
     >
       <span class="w-8 shrink-0 text-gray-500 dark:text-gray-400">{{ t(`iqtest.kindShort.${s.kind}`) }}</span>
-      <span class="badge" :class="stateClass(s.state)">{{ stateLabel(s.state) }}</span>
-      <span v-if="s.consecutive_fails > 0" class="text-red-600 dark:text-red-400">×{{ s.consecutive_fails }}</span>
-      <span class="inline-flex gap-0.5">
+      <span class="badge" :class="accountStateClass(s)">{{ accountStateLabel(s) }}</span>
+      <span v-if="s.consecutive_fails > 0 && s.last_outcome !== 'skipped'" class="text-red-600 dark:text-red-400">×{{ s.consecutive_fails }}</span>
+      <span v-if="s.last_reason !== 'visual_review_required'" class="inline-flex gap-0.5">
         <span
           v-for="(ok, i) in (s.recent || []).slice(-RECENT)"
           :key="i"
@@ -36,14 +36,14 @@ import { formatDateTime } from '@/utils/format'
 import iqtestAPI from '@/api/admin/iqtest'
 import type { IQResult, IQStateRow } from '@/api/admin/iqtest'
 import IQResultListDialog from './IQResultListDialog.vue'
-import { stateClass, useIQLabels } from './labels'
+import { accountStateClass, useIQLabels } from './labels'
 
 defineProps<{ states?: IQStateRow[] }>()
 
 const RECENT = 6
 const { t } = useI18n()
 const appStore = useAppStore()
-const { outcomeLabel, reasonLabel, stateLabel } = useIQLabels()
+const { outcomeLabel, reasonLabel, accountStateLabel } = useIQLabels()
 
 function tooltip(s: IQStateRow) {
   const parts = [`${t('iqtest.column.last')}: ${outcomeLabel(s.last_outcome)}`]

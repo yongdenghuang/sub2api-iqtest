@@ -23,11 +23,12 @@ type AccountTester interface {
 // PinnedRequest asks one specific account to answer one prompt.
 // The account is chosen by the caller; nothing here selects or switches accounts.
 type PinnedRequest struct {
-	AccountID int64
-	Model     string
-	Prompt    string
-	MaxTokens int           // Claude test path only (needs the service hook); 0 keeps the official default
-	Timeout   time.Duration // default 3 minutes
+	AccountID    int64
+	Model        string
+	Prompt       string
+	ImageDataURL string
+	MaxTokens    int           // Claude test path only (needs the service hook); 0 keeps the official default
+	Timeout      time.Duration // default 3 minutes
 }
 
 // Capture is everything observed while the account test ran.
@@ -61,7 +62,7 @@ func RunPinned(parent context.Context, tester AccountTester, req PinnedRequest) 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/internal/iqtest", nil).WithContext(ctx)
-	c.Set(service.AccountTestOverrideKey, service.AccountTestOverride{Prompt: req.Prompt, MaxTokens: req.MaxTokens})
+	c.Set(service.AccountTestOverrideKey, service.AccountTestOverride{Prompt: req.Prompt, MaxTokens: req.MaxTokens, ImageDataURL: req.ImageDataURL})
 
 	start := time.Now()
 	var callErr error

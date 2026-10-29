@@ -68,7 +68,7 @@
                   <div class="text-xs text-gray-500">#{{ s.account_id }} · {{ s.platform }}</div>
                 </td>
                 <td class="px-3 py-2">{{ t(`iqtest.kind.${s.kind}`) }}</td>
-                <td class="px-3 py-2"><span class="badge" :class="stateClass(s.state)">{{ t(`iqtest.state.${s.state}`) }}</span></td>
+                <td class="px-3 py-2"><span class="badge" :class="accountStateClass(s)">{{ accountStateLabel(s) }}</span></td>
                 <td class="px-3 py-2">{{ s.consecutive_fails }}</td>
                 <td class="px-3 py-2">
                   <span class="inline-flex gap-0.5">
@@ -452,7 +452,7 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import IQResultListDialog from './IQResultListDialog.vue'
-import { outcomeClass, stateClass, useIQLabels } from './labels'
+import { outcomeClass, accountStateClass, useIQLabels } from './labels'
 
 type Tab = 'flagged' | 'plans' | 'runs' | 'events'
 
@@ -554,7 +554,7 @@ function setTab(next: Tab) {
 // ---------- labels ----------
 const planName = (id: number) =>
   plans.value.find((p) => p.id === id)?.name ?? (id ? `#${id}` : t('iqtest.run.triggers.adhoc'))
-const { outcomeLabel, reasonLabel, stateLabel, triggerLabel, statusLabel } = useIQLabels()
+const { outcomeLabel, reasonLabel, stateLabel, accountStateLabel, triggerLabel, statusLabel } = useIQLabels()
 function scheduleText(p: IQPlan) {
   return p.schedule_type === 'cron'
     ? `cron ${p.cron_expr}`

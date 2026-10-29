@@ -1,5 +1,15 @@
 export default {
   iqtest: {
+    visual: {
+      title: 'Visual scoring rubric', score: 'Visual score', passed: 'Visually passed', failed: 'Failed', unreviewed: 'Not visually reviewed',
+      reviewFailed: 'Review failed', reviewer: 'Reviewer account',
+      standard: 'Pelican 25, bicycle 25, riding relationship 30, structural coherence 10, readability 10. Passing requires at least 75 total, core scores of 15 / 15 / 18, and no critical defect. AI judgments can be wrong; inspect the evidence.',
+      legacy: 'This historical result only checked SVG structure. Its old structural score is not a visual quality score. Run the pelican test again for visual assessment.',
+      reviewFailedHint: 'Visual review did not complete. This is neither a pass nor evidence of poor account quality.',
+      pelican: 'Pelican recognition', bicycle: 'Bicycle structure', riding: 'Riding relationship', anatomy: 'Structural coherence', clarity: 'Readability',
+      issues: { pelican_missing: 'Pelican not recognizable', bicycle_missing: 'Key bicycle structure missing', not_riding: 'Riding relationship absent', major_structure_error: 'Major structural distortion or obstruction' }
+    },
+
     accountOrder: {
       button: 'Manual order', title: 'Reorder accounts',
       hint: 'Drag the handle or use the arrows to arrange all accounts. The order persists across refreshes and pages without changing scheduling priority.',
@@ -23,7 +33,7 @@ export default {
     filter: { all: 'All quality states', quality_fail: 'Quality issues', infra_error: 'Request issues', normal: 'Quality normal', untested: 'Untested / skipped' },
     batch: {
       button: 'Batch IQ test', title: 'Candy + pelican SVG batch test', running: 'IQ tests running…', submitting: 'Submitting…',
-      progress: '{done} / {total} checks completed', hint: 'Runs in the background and survives page refresh. Each account gets both checks; unavailable accounts include a skip reason.',
+      progress: '{done} / {total} checks completed', hint: 'Runs in the background and survives page refresh. Each account gets both checks. Pelican images require one additional GPT-6 Astra vision call through a separate available OpenAI account. Without a separate reviewer, no pass is awarded.',
       submitFailed: 'Could not confirm submission. Check run history before retrying to avoid duplicate tests.',
       progressFailed: 'Could not fetch progress. The background run is not cancelled.', retryProgress: 'Refresh progress'
     },
@@ -40,7 +50,9 @@ export default {
     state: { normal: 'Normal', suspect: 'Suspect', flagged: 'Flagged' },
     reason: {
       answer_mismatch: 'Wrong answer',
-      svg_invalid: 'Invalid SVG',
+      svg_invalid: 'Invalid SVG structure',
+      visual_mismatch: 'Visual quality failure',
+      visual_review_required: 'Visual review required',
       timeout: 'Timeout',
       rate_limited: 'Rate limited',
       quota_exhausted: 'Quota exhausted',

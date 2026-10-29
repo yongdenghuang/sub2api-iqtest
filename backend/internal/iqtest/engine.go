@@ -36,7 +36,7 @@ type Repo interface {
 // RunStats are the counters of one run.
 type RunStats struct {
 	Accounts    int `json:"accounts"`
-	Requests    int `json:"requests"` // checks that actually reached an upstream
+	Requests    int `json:"requests"` // generation and visual-review upstream calls
 	Pass        int `json:"pass"`
 	QualityFail int `json:"quality_fail"`
 	InfraError  int `json:"infra_error"`
@@ -45,24 +45,28 @@ type RunStats struct {
 
 // Prepared is a run whose accounts are resolved and whose row exists.
 type Prepared struct {
-	Plan     *Plan
-	RunID    int64
-	Trigger  string
-	Accounts []*service.Account
-	reserved int64 // request budget counter
+	Plan        *Plan
+	RunID       int64
+	Trigger     string
+	Accounts    []*service.Account
+	reserved    int64 // request budget counter
+	reviewers   []*service.Account
+	reviewError string
 }
 
-// Engine runs plans against accounts. It never picks or switches accounts on its own.
+// Engine pins generation to each target account and chooses a separate healthy
+// account for visual review; failed generation is never rerouted.
 type Engine struct {
-	repo     Repo
-	accounts AccountSource
-	tester   AccountTester
-	now      func() time.Time
-	sleep    func(ctx context.Context, d time.Duration) bool
+	repo      Repo
+	accounts  AccountSource
+	tester    AccountTester
+	now       func() time.Time
+	sleep     func(ctx context.Context, d time.Duration) bool
+	renderSVG func(context.Context, string) ([]byte, int, int, error)
 }
 
 func NewEngine(repo Repo, accounts AccountSource, tester AccountTester) *Engine {
-	return &Engine{repo: repo, accounts: accounts, tester: tester, now: time.Now, sleep: sleepCtx}
+	return &Engine{repo: repo, accounts: accounts, tester: tester, now: time.Now, sleep: sleepCtx, renderSVG: defaultSVGRenderer}
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) bool {
@@ -156,7 +160,17 @@ func (e *Engine) Prepare(ctx context.Context, p *Plan, trigger string) (*Prepare
 	if err != nil {
 		return nil, err
 	}
-	return &Prepared{Plan: p, RunID: runID, Trigger: trigger, Accounts: accounts}, nil
+	pr := &Prepared{Plan: p, RunID: runID, Trigger: trigger, Accounts: accounts}
+	for _, check := range p.Checks {
+		if check.Kind == TestPelicanSVG {
+			pr.reviewers, err = e.reviewerCandidates(ctx)
+			if err != nil {
+				pr.reviewError = "could not load visual reviewer accounts"
+			}
+			break
+		}
+	}
+	return pr, nil
 }
 
 // Execute runs every check on every prepared account and finishes the run row.
@@ -177,7 +191,9 @@ func (e *Engine) Execute(ctx context.Context, pr *Prepared) RunStats {
 		default:
 			stats.Skipped++
 		}
-		if r.Outcome != OutcomeSkipped {
+		if r.Requests > 0 {
+			stats.Requests += r.Requests
+		} else if r.Outcome != OutcomeSkipped {
 			stats.Requests++
 		}
 	}
@@ -234,7 +250,7 @@ func (e *Engine) checkOne(ctx context.Context, pr *Prepared, a *service.Account,
 	if el := CheckEligibility(a, e.now()); !el.OK {
 		return skip(el.Reason, el.Detail)
 	}
-	if n := atomic.AddInt64(&pr.reserved, 1); p.MaxRequestsPerRun > 0 && n > int64(p.MaxRequestsPerRun) {
+	if !pr.reserveRequest() {
 		return skip(ReasonBudgetExhausted, "request budget of this run is used up")
 	}
 	if p.JitterSeconds > 0 {
@@ -243,7 +259,7 @@ func (e *Engine) checkOne(ctx context.Context, pr *Prepared, a *service.Account,
 			return Result{Kind: chk.Kind, Outcome: OutcomeInfraError, Reason: ReasonCancelled, Detail: "run cancelled"}
 		}
 	}
-	return RunCheck(ctx, e.tester, a.ID, chk)
+	return e.reviewSVG(ctx, pr, a.ID, RunCheck(ctx, e.tester, a.ID, chk))
 }
 
 func (e *Engine) record(ctx context.Context, pr *Prepared, a *service.Account, res Result) {
@@ -299,4 +315,9 @@ func sanitize(s string, max int) string {
 		s = s[:max]
 	}
 	return strings.ToValidUTF8(s, "")
+}
+
+func (pr *Prepared) reserveRequest() bool {
+	n := atomic.AddInt64(&pr.reserved, 1)
+	return pr.Plan.MaxRequestsPerRun <= 0 || n <= int64(pr.Plan.MaxRequestsPerRun)
 }

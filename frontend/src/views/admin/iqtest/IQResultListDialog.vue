@@ -32,7 +32,7 @@
             <td class="px-3 py-2 text-xs text-gray-500">{{ formatDateTime(r.created_at) }}</td>
             <td class="px-3 py-2">{{ r.account_name }} <span class="text-xs text-gray-500">#{{ r.account_id }}</span></td>
             <td class="px-3 py-2">{{ t(`iqtest.kind.${r.kind}`) }}</td>
-            <td class="px-3 py-2"><span class="badge" :class="outcomeClass(r.outcome)">{{ outcomeLabel(r.outcome) }}</span></td>
+            <td class="px-3 py-2"><span class="badge" :class="resultClass(r)">{{ resultLabel(r) }}</span></td>
             <td class="px-3 py-2 text-xs">{{ r.reason ? reasonLabel(r.reason) : '' }}</td>
             <td class="px-3 py-2 text-xs text-gray-500">{{ (r.duration_ms / 1000).toFixed(1) }}s</td>
             <td class="px-3 py-2 text-right">
@@ -60,7 +60,7 @@ import iqtestAPI from '@/api/admin/iqtest'
 import type { IQResult } from '@/api/admin/iqtest'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import IQResultDetail from './IQResultDetail.vue'
-import { outcomeClass, useIQLabels } from './labels'
+import { resultClass, useIQLabels } from './labels'
 
 const props = defineProps<{
   show: boolean
@@ -71,7 +71,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
-const { outcomeLabel, reasonLabel } = useIQLabels()
+const { resultLabel, reasonLabel } = useIQLabels()
 const selectedId = ref<number | null>(null)
 const detail = ref<IQResult | null>(null)
 const detailLoading = ref(false)

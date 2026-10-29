@@ -84,6 +84,26 @@ export interface IQResult {
   duration_ms: number
 }
 
+export interface IQVisualCriterion { score: number; reason: string }
+export interface IQVisualAssessment {
+  pelican: IQVisualCriterion
+  bicycle: IQVisualCriterion
+  riding: IQVisualCriterion
+  anatomy: IQVisualCriterion
+  clarity: IQVisualCriterion
+  critical_errors: string[]
+  confidence: string
+  summary: string
+}
+export interface IQVisualReview {
+  status: 'completed' | 'failed'
+  reviewer_account_id?: number
+  model: string
+  rubric: string
+  pass_threshold: number
+  assessment?: IQVisualAssessment
+}
+
 export interface IQStateRow {
   account_id: number
   account_name: string
