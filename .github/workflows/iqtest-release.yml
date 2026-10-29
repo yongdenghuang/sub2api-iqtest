@@ -34,8 +34,14 @@ jobs:
     with:
       ref: ${{ inputs.ref || github.sha }}
 
+  security:
+    if: github.repository == 'yongdenghuang/sub2api-iqtest' && github.ref == 'refs/heads/feature/iqtest'
+    uses: ./.github/workflows/security-scan.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}
+
   iqtest:
-    needs: ci
+    needs: [ci, security]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
