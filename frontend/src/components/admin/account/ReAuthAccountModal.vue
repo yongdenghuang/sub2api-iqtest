@@ -144,6 +144,9 @@
         @import-sso="handleGrokImportSSO"
       />
 
+      <p v-if="pendingOpenAIOAuth && !applyingOAuth" class="text-sm text-amber-700 dark:text-amber-300" role="status">
+        {{ t('admin.accounts.reAuthSavePending') }}
+      </p>
     </div>
 
     <template #footer>
@@ -181,7 +184,7 @@
           {{
             currentLoading
               ? t('admin.accounts.oauth.verifying')
-              : t('admin.accounts.oauth.completeAuth')
+              : pendingOpenAIOAuth ? t('admin.accounts.reAuthRetrySave') : t('admin.accounts.oauth.completeAuth')
           }}
         </button>
       </div>
@@ -190,10 +193,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, shallowRef, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import {
   useAccountOAuth,
   type AddMethod,
@@ -242,6 +246,15 @@ const grokOAuth = useGrokOAuth()
 
 // Refs
 const oauthFlowRef = ref<OAuthFlowExposed | null>(null)
+const applyingOAuth = ref(false)
+// Only held in this dialog's memory. Never persist new credentials in browser storage.
+const pendingOpenAIOAuth = shallowRef<{
+  accountId: number
+  credentials: Record<string, unknown>
+  extra?: Record<string, unknown>
+} | null>(null)
+let authorizationAttempt = 0
+
 
 // State
 const addMethod = ref<AddMethod>('oauth')
@@ -286,6 +299,7 @@ const currentSessionId = computed(() => {
   return claudeOAuth.sessionId.value
 })
 const currentLoading = computed(() => {
+  if (applyingOAuth.value) return true
   if (isOpenAILike.value) return openaiOAuth.loading.value
   if (isGemini.value) return geminiOAuth.loading.value
   if (isAntigravity.value) return antigravityOAuth.loading.value
@@ -320,13 +334,14 @@ const canExchangeCode = computed(() => {
   const authCode = oauthFlowRef.value?.authCode || ''
   const sessionId = currentSessionId.value
   const loading = currentLoading.value
-  return authCode.trim() && sessionId && !loading
+  return !loading && (pendingOpenAIOAuth.value?.accountId === props.account?.id || (authCode.trim() && sessionId))
 })
 
 // Watchers
 watch(
-  () => props.show,
-  (newVal) => {
+  () => [props.show, props.account?.id] as const,
+  ([newVal]) => {
+    resetState()
     if (newVal && props.account) {
       // Initialize addMethod based on current account type (Claude only)
       if (
@@ -344,14 +359,15 @@ watch(
               ? 'ai_studio'
               : 'code_assist'
       }
-    } else {
-      resetState()
     }
   }
 )
 
 // Methods
 const resetState = () => {
+  authorizationAttempt++
+  pendingOpenAIOAuth.value = null
+  applyingOAuth.value = false
   addMethod.value = 'oauth'
   geminiOAuthType.value = 'code_assist'
   claudeOAuth.resetState()
@@ -363,11 +379,14 @@ const resetState = () => {
 }
 
 const handleClose = () => {
+  resetState()
   emit('close')
 }
 
 const handleGenerateUrl = async () => {
-  if (!props.account) return
+  if (!props.account || currentLoading.value) return
+  authorizationAttempt++
+  pendingOpenAIOAuth.value = null
 
   if (isOpenAILike.value) {
     await openaiOAuth.generateAuthUrl(props.account.proxy_id)
@@ -386,48 +405,46 @@ const handleGenerateUrl = async () => {
 }
 
 const handleExchangeCode = async () => {
-  if (!props.account) return
+  if (!props.account || currentLoading.value) return
 
   const authCode = oauthFlowRef.value?.authCode || ''
-  if (!authCode.trim()) return
+  if (!authCode.trim() && !pendingOpenAIOAuth.value) return
 
   if (isOpenAILike.value) {
-    // OpenAI OAuth flow
-    const oauthClient = openaiOAuth
-    const sessionId = oauthClient.sessionId.value
-    if (!sessionId) return
-    const stateToUse = (oauthFlowRef.value?.oauthState || oauthClient.oauthState.value || '').trim()
-    if (!stateToUse) {
-      oauthClient.error.value = t('admin.accounts.oauth.authFailed')
-      appStore.showError(oauthClient.error.value)
-      return
-    }
-
-    const tokenInfo = await oauthClient.exchangeAuthCode(
-      authCode.trim(),
-      sessionId,
-      stateToUse,
-      props.account.proxy_id
-    )
-    if (!tokenInfo) return
-
-    // Build credentials and extra info
-    const credentials = oauthClient.buildCredentials(tokenInfo)
-    const extra = oauthClient.buildExtraInfo(tokenInfo)
-
+    const account = props.account
+    const attempt = authorizationAttempt
+    const isCurrent = () => attempt === authorizationAttempt && props.show && props.account?.id === account.id
+    applyingOAuth.value = true
+    openaiOAuth.error.value = ''
     try {
-      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
-        type: 'oauth',
-        credentials,
-        extra
+      if (!pendingOpenAIOAuth.value) {
+        const sessionId = openaiOAuth.sessionId.value
+        const state = (oauthFlowRef.value?.oauthState || openaiOAuth.oauthState.value || '').trim()
+        if (!sessionId || !state) return
+        const tokenInfo = await openaiOAuth.exchangeAuthCode(authCode.trim(), sessionId, state, account.proxy_id)
+        if (!tokenInfo || !isCurrent()) return
+        pendingOpenAIOAuth.value = {
+          accountId: account.id,
+          credentials: openaiOAuth.buildCredentials(tokenInfo),
+          extra: openaiOAuth.buildExtraInfo(tokenInfo)
+        }
+      }
+      const pending = pendingOpenAIOAuth.value
+      if (!isCurrent() || pending.accountId !== account.id) return
+      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(account.id, {
+        type: 'oauth', credentials: pending.credentials, extra: pending.extra
       })
-
+      if (!isCurrent()) return
       appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
       emit('reauthorized', updatedAccount)
       handleClose()
-    } catch (error: any) {
-      oauthClient.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
-      appStore.showError(oauthClient.error.value)
+    } catch (error) {
+      if (isCurrent()) {
+        openaiOAuth.error.value = extractApiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
+        appStore.showError(openaiOAuth.error.value)
+      }
+    } finally {
+      if (isCurrent()) applyingOAuth.value = false
     }
   } else if (isGemini.value) {
     const sessionId = geminiOAuth.sessionId.value

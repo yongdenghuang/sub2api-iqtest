@@ -1176,6 +1176,7 @@ const handleCopyUrl = () => {
 
 const handleRegenerate = () => {
   authCodeInput.value = ''
+  oauthState.value = ''
   emit('generate-url')
 }
 

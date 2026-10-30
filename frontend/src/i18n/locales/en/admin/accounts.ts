@@ -1574,7 +1574,9 @@ export default {
       antigravityAccount: 'Antigravity Account',
       grokAccount: 'Grok Account',
       inputMethod: 'Input Method',
-      reAuthorizedSuccess: 'Account re-authorized successfully',
+      reAuthSavePending: 'New authorization received, but saving or recovery is incomplete. Retry saving without signing in again. Closing this dialog discards the pending authorization.',
+      reAuthRetrySave: 'Retry saving',
+      reAuthorizedSuccess: 'Account re-authorized successfully. Test the connection again.',
       // Test Modal
       testAccountConnection: 'Test Account Connection',
       errorPrefix: 'Error: {message}',

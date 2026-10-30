@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -58,6 +59,7 @@ func (c *CompositeTokenCacheInvalidator) InvalidateToken(ctx context.Context, ac
 	}
 
 	// 删除所有可能的缓存键（去重后）
+	var deleteErrors []error
 	seen := make(map[string]bool)
 	for _, key := range keysToDelete {
 		if seen[key] {
@@ -66,10 +68,11 @@ func (c *CompositeTokenCacheInvalidator) InvalidateToken(ctx context.Context, ac
 		seen[key] = true
 		if err := c.cache.DeleteAccessToken(ctx, key); err != nil {
 			slog.Warn("token_cache_delete_failed", "key", key, "account_id", account.ID, "error", err)
+			deleteErrors = append(deleteErrors, err)
 		}
 	}
 
-	return nil
+	return errors.Join(deleteErrors...)
 }
 
 // CheckTokenVersion 检查 account 的 token 版本是否已过时，并返回最新的 account

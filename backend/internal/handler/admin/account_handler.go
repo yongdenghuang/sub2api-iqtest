@@ -1587,7 +1587,7 @@ type ApplyOAuthCredentialsRequest struct {
 	Extra       map[string]any `json:"extra"`
 }
 
-// ApplyOAuthCredentials 将"重新授权"得到的新凭据原子落库。
+// ApplyOAuthCredentials 保存新授权并恢复账号；只有全部恢复步骤成功才返回成功。
 // POST /api/v1/admin/accounts/:id/apply-oauth-credentials
 //
 // 与通用 PUT /:id (Update) 接口的关键区别：
@@ -1625,6 +1625,13 @@ func (h *AccountHandler) ApplyOAuthCredentials(c *gin.Context) {
 		response.ErrorFrom(c, infraerrors.BadRequest("NOT_OAUTH", "cannot apply oauth credentials to non-OAuth account"))
 		return
 	}
+	if existing.Platform == service.PlatformOpenAI {
+		accessToken, _ := req.Credentials["access_token"].(string)
+		if strings.TrimSpace(accessToken) == "" {
+			response.ErrorFrom(c, infraerrors.BadRequest("OAUTH_REAUTH_TOKEN_REQUIRED", "New access token is required for reauthorization"))
+			return
+		}
+	}
 	if err := service.ValidateOpenAILongContextBillingExtra(existing.Platform, req.Extra); err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -1633,6 +1640,15 @@ func (h *AccountHandler) ApplyOAuthCredentials(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+
+	// A reauthorization must publish a new generation. Otherwise a request holding
+	// the old account snapshot can repopulate the token cache after invalidation.
+	version := time.Now().UnixMilli()
+	if previous := existing.GetCredentialAsInt64("_token_version"); previous >= version {
+		version = previous + 1
+	}
+	req.Credentials["_token_version"] = version
+	restoreScheduling := existing.Status == service.StatusError
 
 	// Re-auth only returns authentication fields. Preserve account configuration
 	// stored alongside them (for example model_mapping), while allowing the new
@@ -1650,53 +1666,49 @@ func (h *AccountHandler) ApplyOAuthCredentials(c *gin.Context) {
 		return
 	}
 
-	// 增量合并 Extra（JSONB key 级 merge，绝不覆盖 base_rpm / window_cost_limit /
-	// max_sessions / quota_* / privacy_mode 等持久化键）。
-	// best-effort：失败仅记日志；下方 ClearAccountError 会从 DB 重新读取最新 account，
-	// 因此响应里的 extra 始终以 DB 为准——这里不需要手动维护内存快照。
-	if len(req.Extra) > 0 {
-		if extraErr := h.adminService.UpdateAccountExtra(ctx, accountID, req.Extra); extraErr != nil {
-			extraKeys := make([]string, 0, len(req.Extra))
-			for k := range req.Extra {
-				extraKeys = append(extraKeys, k)
-			}
-			slog.Error("apply_oauth_credentials.update_extra_failed",
-				"account_id", accountID,
-				"extra_keys", extraKeys,
-				"err", extraErr,
-			)
-		}
-	}
-
-	// Successful re-auth clears the soft spending-limit reauth flag for Grok.
-	if existing.Platform == service.PlatformGrok {
-		if clearErr := h.adminService.UpdateAccountExtra(ctx, accountID, map[string]any{
-			"grok_needs_reauth":        false,
-			"grok_needs_reauth_reason": "",
-			"grok_needs_reauth_at":     "",
-		}); clearErr != nil {
-			slog.Warn("apply_oauth_credentials.clear_grok_reauth_failed",
-				"account_id", accountID,
-				"err", clearErr,
-			)
-		}
-	}
-
-	if cleared, clearErr := h.adminService.ClearAccountError(ctx, accountID); clearErr != nil {
-		slog.Warn("apply_oauth_credentials.clear_error_failed",
-			"account_id", accountID,
-			"err", clearErr,
-		)
-	} else if cleared != nil {
-		updatedAccount = cleared
-	}
-
+	// Invalidate before making an errored account eligible for requests again.
+	// Do not report success when recovery fails: the client can retry persisting
+	// the already-exchanged credentials without consuming the OAuth code twice.
 	if h.tokenCacheInvalidator != nil && updatedAccount.IsOAuth() {
-		if invalidateErr := h.tokenCacheInvalidator.InvalidateToken(ctx, updatedAccount); invalidateErr != nil {
-			slog.Warn("apply_oauth_credentials.invalidate_token_failed",
-				"account_id", accountID,
-				"err", invalidateErr,
-			)
+		if err := h.tokenCacheInvalidator.InvalidateToken(ctx, updatedAccount); err != nil {
+			response.ErrorFrom(c, infraerrors.New(http.StatusServiceUnavailable,
+				"OAUTH_REAUTH_CACHE_FAILED", "New credentials saved, but token cache cleanup failed; retry saving authorization"))
+			return
+		}
+	}
+
+	// Keep account configuration and history; only merge metadata returned by OAuth.
+	if len(req.Extra) > 0 {
+		if err := h.adminService.UpdateAccountExtra(ctx, accountID, req.Extra); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
+	if existing.Platform == service.PlatformGrok {
+		if err := h.adminService.UpdateAccountExtra(ctx, accountID, map[string]any{
+			"grok_needs_reauth": false, "grok_needs_reauth_reason": "", "grok_needs_reauth_at": "",
+		}); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
+
+	if restoreScheduling {
+		// SetError disables scheduling. Restore it while status is still error;
+		// failed cleanup remains retryable and the scheduler still rejects it.
+		if _, err := h.adminService.SetAccountSchedulable(ctx, accountID, true); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
+	if existing.Status != service.StatusDisabled {
+		cleared, err := h.adminService.ClearAccountError(ctx, accountID)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		if cleared != nil {
+			updatedAccount = cleared
 		}
 	}
 

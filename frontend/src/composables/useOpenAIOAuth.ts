@@ -38,9 +38,11 @@ export function useOpenAIOAuth() {
   const oauthState = ref('')
   const loading = ref(false)
   const error = ref('')
+  let generation = 0
 
   // Reset state
   const resetState = () => {
+    generation++
     authUrl.value = ''
     sessionId.value = ''
     oauthState.value = ''
@@ -53,6 +55,7 @@ export function useOpenAIOAuth() {
     proxyId?: number | null,
     redirectUri?: string
   ): Promise<boolean> => {
+    const current = ++generation
     loading.value = true
     authUrl.value = ''
     sessionId.value = ''
@@ -72,6 +75,7 @@ export function useOpenAIOAuth() {
         `${endpointPrefix}/generate-auth-url`,
         payload
       )
+      if (current !== generation) return false
       authUrl.value = response.auth_url
       sessionId.value = response.session_id
       try {
@@ -82,11 +86,12 @@ export function useOpenAIOAuth() {
       }
       return true
     } catch (err: any) {
+      if (current !== generation) return false
       error.value = extractApiErrorMessage(err, t('admin.accounts.oauth.openai.failedToGenerateUrl'))
       appStore.showError(error.value)
       return false
     } finally {
-      loading.value = false
+      if (current === generation) loading.value = false
     }
   }
 
@@ -102,6 +107,7 @@ export function useOpenAIOAuth() {
       return null
     }
 
+    const current = generation
     loading.value = true
     error.value = ''
 
@@ -116,8 +122,9 @@ export function useOpenAIOAuth() {
       }
 
       const tokenInfo = await adminAPI.accounts.exchangeCode(`${endpointPrefix}/exchange-code`, payload)
-      return tokenInfo as OpenAITokenInfo
+      return current === generation ? tokenInfo as OpenAITokenInfo : null
     } catch (err: any) {
+      if (current !== generation) return null
       error.value = extractI18nErrorMessage(
         err,
         t,
@@ -127,7 +134,7 @@ export function useOpenAIOAuth() {
       appStore.showError(error.value)
       return null
     } finally {
-      loading.value = false
+      if (current === generation) loading.value = false
     }
   }
 

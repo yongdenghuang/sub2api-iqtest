@@ -172,6 +172,8 @@ func TestApplyOAuthCredentialsPreservesExistingNonAuthCredentials(t *testing.T) 
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, 1, stub.updateAccountCalls)
+	require.Positive(t, stub.lastUpdateAccountInput.Credentials["_token_version"])
+	delete(stub.lastUpdateAccountInput.Credentials, "_token_version")
 	require.Equal(t, map[string]any{
 		"access_token":  "new-token",
 		"refresh_token": "new-refresh-token",

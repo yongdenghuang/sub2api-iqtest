@@ -1664,7 +1664,9 @@ export default {
       antigravityAccount: 'Antigravity 账号',
       grokAccount: 'Grok 账号',
       inputMethod: '输入方式',
-      reAuthorizedSuccess: '账号重新授权成功',
+      reAuthSavePending: '已获取新授权，但保存或恢复尚未完成。可直接重试保存，无需再次登录；关闭弹窗后需重新授权。',
+      reAuthRetrySave: '重试保存',
+      reAuthorizedSuccess: '账号重新授权成功，请重新测试连接',
       // Test Modal
       testAccountConnection: '测试账号连接',
       errorPrefix: '错误：{message}',

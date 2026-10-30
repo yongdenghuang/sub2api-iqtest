@@ -91,4 +91,34 @@ describe('useOpenAIOAuth.exchangeAuthCode', () => {
       '未设置代理，当前服务器无法直连 OpenAI，导致 OpenAI OAuth 请求失败。请先选择可访问 OpenAI 的代理后重试；如果授权码已失效，请重新生成授权链接。'
     )
   })
+
+  it('ignores exchanged credentials after the authorization dialog is reset', async () => {
+    let resolve!: (value: unknown) => void
+    vi.mocked(adminAPI.accounts.exchangeCode).mockReturnValueOnce(new Promise(r => { resolve = r }) as never)
+    const oauth = useOpenAIOAuth()
+    const exchange = oauth.exchangeAuthCode('code', 'session', 'state')
+    oauth.resetState()
+    resolve({ access_token: 'late-token' })
+    expect(await exchange).toBeNull()
+    expect(oauth.loading.value).toBe(false)
+    expect(oauth.error.value).toBe('')
+  })
+})
+
+describe('useOpenAIOAuth authorization sessions', () => {
+  it('does not restore an old authorization URL over a newly opened session', async () => {
+    let resolve!: (value: unknown) => void
+    vi.mocked(adminAPI.accounts.generateAuthUrl)
+      .mockReturnValueOnce(new Promise(r => { resolve = r }) as never)
+      .mockResolvedValueOnce({ auth_url: 'https://auth.example.test/?state=new', session_id: 'new-session' })
+    const oauth = useOpenAIOAuth()
+    const oldRequest = oauth.generateAuthUrl()
+    oauth.resetState()
+    await oauth.generateAuthUrl()
+    resolve({ auth_url: 'https://auth.example.test/?state=old', session_id: 'old-session' })
+    expect(await oldRequest).toBe(false)
+    expect(oauth.sessionId.value).toBe('new-session')
+    expect(oauth.oauthState.value).toBe('new')
+    expect(oauth.loading.value).toBe(false)
+  })
 })

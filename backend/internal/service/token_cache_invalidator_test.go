@@ -272,10 +272,9 @@ func TestCompositeTokenCacheInvalidator_DeleteError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 新行为：删除失败只记录日志，不返回错误
-			// 这是因为缓存失效失败不应影响主业务流程
+			// Callers decide whether failed invalidation is fatal for their operation.
 			err := invalidator.InvalidateToken(context.Background(), tt.account)
-			require.NoError(t, err)
+			require.ErrorIs(t, err, expectedErr)
 		})
 	}
 }
