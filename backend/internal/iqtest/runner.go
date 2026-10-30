@@ -13,14 +13,15 @@ import (
 // rate limited, overloaded or temporarily unschedulable.
 const ReasonCoolingDown Reason = "cooling_down"
 
-// DefaultModel is shared by every IQ check, including ad-hoc and scheduled runs.
+// DefaultModel is the legacy fallback for direct runner/non-OpenAI callers.
+// OpenAI plans and ad-hoc runs resolve AutoModel through the live catalog.
 const DefaultModel = openai.DefaultTestModel
 
 // CheckConfig describes one check inside a plan. Zero values select defaults.
 type CheckConfig struct {
 	Kind           TestKind   `json:"kind"`
 	Prompt         string     `json:"prompt,omitempty"`          // empty = built-in prompt
-	Model          string     `json:"model,omitempty"`           // empty = DefaultModel
+	Model          string     `json:"model,omitempty"`           // empty/auto = strongest available per account (engine)
 	MaxTokens      int        `json:"max_tokens,omitempty"`      // Claude test path only
 	TimeoutSeconds int        `json:"timeout_seconds,omitempty"` // per request
 	CandyMode      CandyMode  `json:"candy_mode,omitempty"`
@@ -75,10 +76,12 @@ func RunCheck(ctx context.Context, tester AccountTester, accountID int64, cfg Ch
 	case TestCandy:
 		r := JudgeCandy(out, cfg.CandyMode)
 		r.Requests = 1
+		r.Model = firstNonEmpty(out.Model, cfg.Model)
 		return r
 	case TestPelicanSVG:
 		r := JudgeSVG(out, cfg.SVG)
 		r.Requests = 1
+		r.Model = firstNonEmpty(out.Model, cfg.Model)
 		return r
 	}
 	return Result{
@@ -106,6 +109,9 @@ func CheckEligibility(a *service.Account, now time.Time) Eligibility {
 		return skip(ReasonAccountDisabled, "account not found")
 	case a.IsSyntheticUITest():
 		return skip(ReasonPlatformUnsupported, "synthetic UI test account")
+	case a.Status == service.StatusError:
+		cls := classifyErrorText(a.ErrorMessage)
+		return skip(cls.Reason, a.ErrorMessage)
 	case !a.IsActive():
 		return skip(ReasonAccountDisabled, "account is not active")
 	case a.IsBedrock() || a.Type == service.AccountTypeServiceAccount:

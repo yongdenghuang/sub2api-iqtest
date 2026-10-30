@@ -57,16 +57,18 @@ type Prepared struct {
 // Engine pins generation to each target account and chooses a separate healthy
 // account for visual review; failed generation is never rerouted.
 type Engine struct {
-	repo      Repo
-	accounts  AccountSource
-	tester    AccountTester
-	now       func() time.Time
-	sleep     func(ctx context.Context, d time.Duration) bool
-	renderSVG func(context.Context, string) ([]byte, int, int, error)
+	repo             Repo
+	accounts         AccountSource
+	tester           AccountTester
+	models           ModelCatalog
+	modelPreferences *modelPreferences
+	now              func() time.Time
+	sleep            func(ctx context.Context, d time.Duration) bool
+	renderSVG        func(context.Context, string) ([]byte, int, int, error)
 }
 
 func NewEngine(repo Repo, accounts AccountSource, tester AccountTester) *Engine {
-	return &Engine{repo: repo, accounts: accounts, tester: tester, now: time.Now, sleep: sleepCtx, renderSVG: defaultSVGRenderer}
+	return &Engine{repo: repo, accounts: accounts, tester: tester, now: time.Now, sleep: sleepCtx, renderSVG: defaultSVGRenderer, modelPreferences: newModelPreferences()}
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) bool {
@@ -250,8 +252,13 @@ func (e *Engine) checkOne(ctx context.Context, pr *Prepared, a *service.Account,
 	if el := CheckEligibility(a, e.now()); !el.OK {
 		return skip(el.Reason, el.Detail)
 	}
-	if !pr.reserveRequest() {
-		return skip(ReasonBudgetExhausted, "request budget of this run is used up")
+	models, err := e.testModels(ctx, a, chk.Model, false)
+	if err != nil {
+		cls := classifyErrorText(err.Error())
+		if cls.Reason == ReasonUnknownError {
+			cls.Reason = ReasonModelCatalog
+		}
+		return Result{Kind: chk.Kind, Outcome: OutcomeInfraError, Reason: cls.Reason, Detail: cls.Detail}
 	}
 	if p.JitterSeconds > 0 {
 		d := time.Duration(rand.Int63n(int64(p.JitterSeconds)*int64(time.Second) + 1))
@@ -259,7 +266,32 @@ func (e *Engine) checkOne(ctx context.Context, pr *Prepared, a *service.Account,
 			return Result{Kind: chk.Kind, Outcome: OutcomeInfraError, Reason: ReasonCancelled, Detail: "run cancelled"}
 		}
 	}
-	return e.reviewSVG(ctx, pr, a.ID, RunCheck(ctx, e.tester, a.ID, chk))
+	var res Result
+	requests := 0
+	var duration int64
+	for i, model := range models {
+		if i >= 8 {
+			break
+		} // Bound stale-catalog probes; never change the account.
+		if !pr.reserveRequest() {
+			if requests == 0 {
+				return skip(ReasonBudgetExhausted, "request budget of this run is used up")
+			}
+			break
+		}
+		selected := chk
+		selected.Model = model
+		res = RunCheck(ctx, e.tester, a.ID, selected)
+		requests += res.Requests
+		duration += res.DurationMs
+		// Only an unavailable model can advance to the next model. Auth, quota,
+		// timeout and wrong answers must remain visible, never retried away.
+		if res.Reason != ReasonModelUnsupported || !isAutoModel(chk.Model) {
+			break
+		}
+	}
+	res.Requests, res.DurationMs = requests, duration
+	return e.reviewSVG(ctx, pr, a.ID, res)
 }
 
 func (e *Engine) record(ctx context.Context, pr *Prepared, a *service.Account, res Result) {

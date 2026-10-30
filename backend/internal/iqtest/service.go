@@ -17,6 +17,7 @@ type Deps struct {
 	Redis    *redis.Client // optional
 	Accounts AccountSource
 	Tester   AccountTester
+	Models   ModelCatalog
 }
 
 // Service is the running iqtest feature.
@@ -53,6 +54,7 @@ func Setup(d Deps) (*Service, error) {
 		}
 	}
 	engine := NewEngine(store, d.Accounts, d.Tester)
+	engine.models = d.Models
 	sched := NewScheduler(store, engine, d.Redis, loc)
 	sched.Start()
 	return &Service{store: store, engine: engine, sched: sched, loc: loc}, nil

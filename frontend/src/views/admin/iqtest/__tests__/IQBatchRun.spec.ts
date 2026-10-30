@@ -32,7 +32,7 @@ describe('batch IQ testing', () => {
     void wrapper.vm.start([99])
     await start
     expect(iqtestAPI.runAdHoc).toHaveBeenCalledTimes(1)
-    expect(iqtestAPI.runAdHoc).toHaveBeenCalledWith({ account_ids: [17,31], checks: [{kind:'candy',model:'gpt-6-astra'}, {kind:'pelican_svg',model:'gpt-6-astra'}] })
+    expect(iqtestAPI.runAdHoc).toHaveBeenCalledWith({ account_ids: [17,31], checks: [{kind:'candy',model:'auto'}, {kind:'pelican_svg',model:'auto'}] })
     expect(wrapper.vm.busy).toBe(true)
     expect(wrapper.get('progress').attributes('value')).toBe('1')
     expect(wrapper.get('progress').attributes('max')).toBe('4')

@@ -4,6 +4,7 @@ import "strings"
 
 // Result is the final verdict for one check on one account.
 type Result struct {
+	Model      string   `json:"model,omitempty"`
 	Kind       TestKind `json:"kind"`
 	Outcome    Outcome  `json:"outcome"`
 	Reason     Reason   `json:"reason,omitempty"`

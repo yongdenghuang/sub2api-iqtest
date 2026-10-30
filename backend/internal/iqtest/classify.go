@@ -24,7 +24,7 @@ type Classification struct {
 //	API returned <status>: <body>      (upstream answered non-200)
 //	Request failed: <error>            (transport error)
 //	No access token available / No API key available / Account not found
-var apiStatusRe = regexp.MustCompile(`API returned (\d{3})\b`)
+var apiStatusRe = regexp.MustCompile(`(?i)(?:API returned |status[\s:=]+)(\d{3})\b`)
 
 // ClassifyCapture decides whether the run produced something we may judge.
 // Anything ambiguous is classified as infra_error so it can never be counted
@@ -72,6 +72,9 @@ func classifyErrorText(msg string) Classification {
 		return Classification{Outcome: OutcomeInfraError, Reason: r, Detail: detail}
 	}
 
+	if containsAny(lower, "token_revoked", "token_expired", "refresh_token_reused", "invalid_grant", "refresh token expired", "refresh token has expired") {
+		return infra(ReasonAuthExpired)
+	}
 	if m := apiStatusRe.FindStringSubmatch(msg); m != nil {
 		status, _ := strconv.Atoi(m[1])
 		quota := mentionsQuota(lower)
@@ -80,8 +83,10 @@ func classifyErrorText(msg string) Classification {
 			return infra(ReasonQuotaExhausted)
 		case status == 429:
 			return infra(ReasonRateLimited)
-		case status == 401 || status == 403:
+		case status == 401:
 			return infra(ReasonAuthError)
+		case status == 403:
+			return infra(ReasonPermissionDenied)
 		case status == 408 || status == 504:
 			return infra(ReasonTimeout)
 		case status == 404 || (status == 400 && mentionsModelProblem(lower)):
@@ -93,6 +98,8 @@ func classifyErrorText(msg string) Classification {
 	}
 
 	switch {
+	case containsAny(lower, "model_not_found") || mentionsModelProblem(lower):
+		return infra(ReasonModelUnsupported)
 	case strings.HasPrefix(lower, "no access token") || strings.HasPrefix(lower, "no api key"):
 		return infra(ReasonAuthError)
 	case strings.HasPrefix(lower, "account not found"):

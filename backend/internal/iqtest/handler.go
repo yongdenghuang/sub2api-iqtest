@@ -63,7 +63,7 @@ func queryInt(c *gin.Context, name string, def, max int) int {
 
 func (s *Service) getDefaults(c *gin.Context) {
 	response.Success(c, gin.H{
-		"default_model":        DefaultModel,
+		"default_model":        AutoModel,
 		"candy_prompt":         DefaultCandyPrompt,
 		"pelican_prompt":       DefaultPelicanPrompt,
 		"policy":               Policy{}.withDefaults(),

@@ -157,8 +157,8 @@ func (e *Engine) reviewSVG(ctx context.Context, pr *Prepared, subjectID int64, r
 	}
 	started := time.Now()
 	metrics, _ := res.Metrics.(SVGReviewMetrics)
-	metrics.Requests = 1
-	review := &VisualReview{Status: "failed", Model: DefaultModel, Rubric: VisualRubricVersion, PassThreshold: visualPassScore}
+	metrics.Requests = res.Requests
+	review := &VisualReview{Status: "failed", Rubric: VisualRubricVersion, PassThreshold: visualPassScore}
 	metrics.Visual = review
 	res.Score = 0
 	fail := func(detail string) Result {
@@ -172,18 +172,42 @@ func (e *Engine) reviewSVG(ctx context.Context, pr *Prepared, subjectID int64, r
 		return fail(err.Error())
 	}
 	review.ReviewerAccountID = id
+	accounts, err := e.accounts.GetAccountsByIDs(ctx, []int64{id})
+	if err != nil || len(accounts) != 1 {
+		return fail("could not load reviewer model access")
+	}
+	models, err := e.testModels(ctx, accounts[0], AutoModel, true)
+	if err != nil {
+		return fail("visual review model discovery failed: " + err.Error())
+	}
 	png, w, h, err := e.renderSVG(ctx, res.Output)
 	if err != nil {
 		return fail("could not render SVG for visual review")
 	}
 	review.Width, review.Height = w, h
 	review.ImageSHA256 = fmt.Sprintf("%x", sha256.Sum256(png))
-	if !pr.reserveRequest() {
-		return fail("visual review request budget exhausted")
+	var capture Capture
+	for i, model := range models {
+		if i >= 8 {
+			break
+		}
+		if !pr.reserveRequest() {
+			return fail("visual review request budget exhausted")
+		}
+		metrics.Requests++
+		res.Requests++
+		review.Model = model
+		capture = RunPinned(ctx, e.tester, PinnedRequest{AccountID: id, Model: model, Prompt: visualReviewPrompt, ImageDataURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString(png), Timeout: 180 * time.Second})
+		review.Model = firstNonEmpty(capture.Model, model)
+		cls := ClassifyCapture(capture)
+		if cls.Reason == ReasonModelUnsupported {
+			continue
+		}
+		if cls.Outcome != "" {
+			return fail("visual review request failed: " + string(cls.Reason))
+		}
+		break
 	}
-	metrics.Requests++
-	res.Requests++
-	capture := RunPinned(ctx, e.tester, PinnedRequest{AccountID: id, Model: DefaultModel, Prompt: visualReviewPrompt, ImageDataURL: "data:image/png;base64," + base64.StdEncoding.EncodeToString(png), Timeout: 180 * time.Second})
 	if cls := ClassifyCapture(capture); cls.Outcome != "" {
 		return fail("visual review request failed: " + string(cls.Reason))
 	}

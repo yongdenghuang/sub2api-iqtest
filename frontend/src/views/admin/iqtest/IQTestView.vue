@@ -283,7 +283,8 @@
               </div>
               <div>
                 <label class="input-label">{{ t('iqtest.plan.model') }}</label>
-                <input v-model="form.checks[k].model" class="input" :placeholder="defaults?.default_model || DEFAULT_TEST_MODEL" />
+                <input v-model="form.checks[k].model" class="input" :placeholder="t('iqtest.plan.autoModel')" />
+                <p class="mt-1 text-xs text-gray-500">{{ t('iqtest.plan.modelHint') }}</p>
               </div>
               <div>
                 <label class="input-label">{{ t('iqtest.plan.maxTokens') }}</label>
@@ -431,7 +432,6 @@
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { DEFAULT_TEST_MODEL } from '@/constants/accountTestModel'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -578,7 +578,7 @@ interface CheckForm {
 const blankCheck = (): CheckForm => ({
   on: false,
   prompt: '',
-  model: defaults.value?.default_model ?? DEFAULT_TEST_MODEL,
+  model: defaults.value?.default_model ?? 'auto',
   max_tokens: 0,
   timeout_seconds: 0,
   candy_mode: 'anywhere'
@@ -659,7 +659,7 @@ function openEdit(p: IQPlan) {
     f.checks[c.kind] = {
       on: true,
       prompt: c.prompt ?? '',
-      model: c.model?.trim() || defaults.value?.default_model || DEFAULT_TEST_MODEL,
+      model: c.model?.trim() || defaults.value?.default_model || 'auto',
       max_tokens: c.max_tokens ?? 0,
       timeout_seconds: c.timeout_seconds ?? 0,
       candy_mode: c.candy_mode === 'final' ? 'final' : 'anywhere'

@@ -8,6 +8,7 @@
             <th class="px-3 py-2">{{ t('iqtest.result.time') }}</th>
             <th v-if="!recent" class="px-3 py-2">{{ t('iqtest.result.account') }}</th>
             <th v-if="!recent" class="px-3 py-2">{{ t('iqtest.result.kind') }}</th>
+            <th class="px-3 py-2">{{ t('iqtest.result.model') }}</th>
             <th class="px-3 py-2">{{ t('iqtest.result.outcome') }}</th>
             <th class="px-3 py-2">{{ t('iqtest.result.reason') }}</th>
             <th class="px-3 py-2">{{ t('iqtest.result.duration') }}</th>
@@ -25,6 +26,7 @@
             <td class="px-3 py-2 text-xs text-gray-500">{{ formatDateTime(r.created_at) }}</td>
             <td v-if="!recent" class="px-3 py-2">{{ r.account_name }} <span class="text-xs text-gray-500">#{{ r.account_id }}</span></td>
             <td v-if="!recent" class="px-3 py-2">{{ t(`iqtest.kind.${r.kind}`) }}</td>
+            <td class="px-3 py-2 text-xs font-mono" data-iq-model>{{ r.model || t('iqtest.result.modelUnknown') }}</td>
             <td class="px-3 py-2"><span class="badge" :class="resultClass(r)">{{ resultLabel(r) }}</span></td>
             <td class="px-3 py-2 text-xs">{{ r.reason ? reasonLabel(r.reason) : '' }}</td>
             <td class="px-3 py-2 text-xs text-gray-500">{{ (r.duration_ms / 1000).toFixed(1) }}s</td>
@@ -35,7 +37,7 @@
             </td>
           </tr>
           <tr v-if="!visibleItems.length">
-            <td :colspan="recent ? 5 : 7" class="px-3 py-6 text-center text-gray-500">{{ loading ? t('iqtest.result.loading') : t('iqtest.events.empty') }}</td>
+            <td :colspan="recent ? 6 : 8" class="px-3 py-6 text-center text-gray-500">{{ loading ? t('iqtest.result.loading') : t('iqtest.events.empty') }}</td>
           </tr>
         </tbody>
       </table>

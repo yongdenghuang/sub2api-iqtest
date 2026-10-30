@@ -228,3 +228,11 @@ describe('AccountStatusIndicator', () => {
     expect(wrapper.text()).toContain('admin.accounts.status.creditsExhausted')
   })
 })
+
+
+it('displays revoked authorization below the error, even if an old rate limit remains', () => {
+  const wrapper = mount(AccountStatusIndicator, { props: { account: makeAccount({ status: 'error', error_message: 'API returned 401: token_revoked', rate_limit_reset_at: '2099-01-01T00:00:00Z' }) }, global: { stubs: { Icon: true } } })
+  expect(wrapper.get('[data-account-error-reason]').text()).toBe('iqtest.reason.auth_expired')
+  expect(wrapper.text()).toContain('admin.accounts.status.error')
+  expect(wrapper.text()).not.toContain('admin.accounts.status.rateLimited')
+})

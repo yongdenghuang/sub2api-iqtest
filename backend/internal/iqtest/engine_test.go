@@ -112,6 +112,10 @@ func newPlan() *Plan {
 
 func newTestEngine(repo Repo, accts []*service.Account, tester AccountTester) *Engine {
 	e := NewEngine(repo, fakeAccounts{list: accts}, tester)
+	e.models = catalogFunc(func(context.Context, *service.Account) (*service.OpenAIModelsResponse, error) {
+		return &service.OpenAIModelsResponse{Body: []byte(`{"models":[{"slug":"gpt-6-astra","input_modalities":["text","image"]}]}`)}, nil
+	})
+	e.modelPreferences.nextRefresh = time.Now().Add(time.Hour)
 	e.sleep = func(context.Context, time.Duration) bool { return true }
 	return e
 }

@@ -12,7 +12,7 @@
     >
       <span class="w-8 shrink-0 text-gray-500 dark:text-gray-400">{{ t(`iqtest.kindShort.${s.kind}`) }}</span>
       <span class="badge" :class="accountStateClass(s)">{{ accountStateLabel(s) }}</span>
-      <span v-if="s.consecutive_fails > 0 && s.last_outcome !== 'skipped'" class="text-red-600 dark:text-red-400">×{{ s.consecutive_fails }}</span>
+      <span v-if="s.consecutive_fails > 0 && s.last_outcome === 'quality_fail'" class="text-red-600 dark:text-red-400">×{{ s.consecutive_fails }}</span>
       <span v-if="s.last_reason !== 'visual_review_required'" class="inline-flex gap-0.5">
         <span
           v-for="(ok, i) in (s.recent || []).slice(-RECENT)"

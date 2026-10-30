@@ -67,6 +67,7 @@ export interface IQRun {
 }
 
 export interface IQResult {
+  model?: string
   id: number
   run_id: number
   plan_id: number

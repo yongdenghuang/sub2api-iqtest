@@ -36,7 +36,6 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { DEFAULT_TEST_MODEL } from '@/constants/accountTestModel'
 import iqtestAPI, { type IQResult, type IQRun } from '@/api/admin/iqtest'
 import IQResultListDialog from './IQResultListDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -81,7 +80,7 @@ async function start(ids: number[]) {
   submitting.value = true
   error.value = ''
   try {
-    const response = await iqtestAPI.runAdHoc({ account_ids: [...new Set(ids)], checks: [{ kind: 'candy', model: DEFAULT_TEST_MODEL }, { kind: 'pelican_svg', model: DEFAULT_TEST_MODEL }] })
+    const response = await iqtestAPI.runAdHoc({ account_ids: [...new Set(ids)], checks: [{ kind: 'candy', model: 'auto' }, { kind: 'pelican_svg', model: 'auto' }] })
     if (disposed) return
     runId.value = response.run_id
     run.value = null

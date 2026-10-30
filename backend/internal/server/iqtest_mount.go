@@ -29,7 +29,7 @@ func mountIQTest(
 	if admin == nil || tester == nil {
 		return
 	}
-	svc, err := iqtest.Setup(iqtest.Deps{Cfg: cfg, Redis: rdb, Accounts: admin, Tester: tester})
+	svc, err := iqtest.Setup(iqtest.Deps{Cfg: cfg, Redis: rdb, Accounts: admin, Tester: tester, Models: h.OpenAIGateway.IQTestModels()})
 	if err != nil {
 		slog.Error("iqtest disabled: setup failed", "error", err)
 		return

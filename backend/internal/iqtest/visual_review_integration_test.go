@@ -35,9 +35,22 @@ func TestVisualReviewMigrationRetiresLegacyPasses(t *testing.T) {
  (1,'pelican_svg','{"state":"normal","last_outcome":"pass","recent":[true,true],"consecutive_passes":2}'),
  (1,'candy','{"state":"normal","last_outcome":"pass","recent":[true]}');`)
 	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO iq_plans(name,config) VALUES ('old default','{"checks":[{"kind":"candy","model":"gpt-6-astra"},{"kind":"pelican_svg","model":"custom"}]}');`)
+	require.NoError(t, err)
 	store := &Store{db: db}
 	require.NoError(t, store.Migrate(ctx))
 	require.NoError(t, store.Migrate(ctx))
+	var auto, custom string
+	require.NoError(t, db.QueryRow(`SELECT config->'checks'->0->>'model',config->'checks'->1->>'model' FROM iq_plans WHERE name='old default'`).Scan(&auto, &custom))
+	require.Equal(t, AutoModel, auto)
+	require.Equal(t, "custom", custom)
+	_, err = db.Exec(`SELECT setval(pg_get_serial_sequence('iq_results','id'),100)`)
+	require.NoError(t, err)
+	fresh := &ResultRecord{RunID: 1, AccountID: 1, Result: Result{Kind: TestCandy, Outcome: OutcomePass, Model: "gpt-6-luna"}}
+	require.NoError(t, store.InsertResult(ctx, fresh))
+	stored, err := store.GetResult(ctx, fresh.ID)
+	require.NoError(t, err)
+	require.Equal(t, "gpt-6-luna", stored.Model)
 	result, err := store.GetResult(ctx, 1)
 	require.NoError(t, err)
 	require.Equal(t, OutcomeSkipped, result.Outcome)

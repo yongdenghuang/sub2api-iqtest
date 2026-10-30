@@ -110,6 +110,13 @@ var migrations = []string{
   'last_outcome',CASE WHEN state->>'last_outcome'='pass' THEN 'skipped' ELSE state->>'last_outcome' END,
   'last_reason',CASE WHEN state->>'last_outcome'='pass' THEN 'visual_review_required' ELSE COALESCE(state->>'last_reason','') END
  ) WHERE kind='pelican_svg';`,
+	`ALTER TABLE iq_results ADD COLUMN IF NOT EXISTS model TEXT NOT NULL DEFAULT '';
+	-- Previous UI prefilled Astra for all plans. Move that old default to per-account auto.
+	UPDATE iq_plans SET config = jsonb_set(config, '{checks}', (
+	 SELECT jsonb_agg(CASE WHEN COALESCE(c->>'model','') IN ('','gpt-6-astra')
+	 THEN jsonb_set(c,'{model}','"auto"'::jsonb) ELSE c END ORDER BY ord)
+	 FROM jsonb_array_elements(config->'checks') WITH ORDINALITY AS x(c,ord)
+	)) WHERE jsonb_typeof(config->'checks')='array' AND jsonb_array_length(config->'checks')>0;`,
 }
 
 const migrationLockKey = 7392011
@@ -418,14 +425,29 @@ type ResultRecord struct {
 func (s *Store) InsertResult(ctx context.Context, r *ResultRecord) error {
 	metrics, err := json.Marshal(r.Metrics)
 	if err != nil {
-		metrics = []byte("null")
+		return err
+	}
+	var metadata map[string]json.RawMessage
+	if err := json.Unmarshal(metrics, &metadata); err != nil {
+		return err
+	}
+	if metadata == nil {
+		metadata = make(map[string]json.RawMessage)
+	}
+	metadata["requests"], err = json.Marshal(r.Requests)
+	if err != nil {
+		return err
+	}
+	metrics, err = json.Marshal(metadata)
+	if err != nil {
+		return err
 	}
 	return s.db.QueryRowContext(ctx,
 		`INSERT INTO iq_results (run_id, plan_id, account_id, account_name, platform, kind, outcome, reason,
-		 detail, output, score, metrics, duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13)
+		 detail, output, score, metrics, duration_ms, model) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14)
 		 RETURNING id, created_at`,
 		r.RunID, r.PlanID, r.AccountID, r.AccountName, r.Platform, string(r.Kind), string(r.Outcome), string(r.Reason),
-		r.Detail, r.Output, r.Score, string(metrics), r.DurationMs).Scan(&r.ID, &r.CreatedAt)
+		r.Detail, r.Output, r.Score, string(metrics), r.DurationMs, r.Model).Scan(&r.ID, &r.CreatedAt)
 }
 
 func (s *Store) PruneResults(ctx context.Context, accountID int64, kind TestKind, keep int) error {
@@ -439,15 +461,15 @@ func (s *Store) PruneResults(ctx context.Context, accountID int64, kind TestKind
 	return err
 }
 
-const resultColsLite = `id, run_id, plan_id, account_id, account_name, platform, kind, outcome, reason, detail, '' AS output, score, metrics, duration_ms, created_at`
-const resultColsFull = `id, run_id, plan_id, account_id, account_name, platform, kind, outcome, reason, detail, output, score, metrics, duration_ms, created_at`
+const resultColsLite = `id, run_id, plan_id, account_id, account_name, platform, kind, outcome, reason, detail, '' AS output, score, metrics, duration_ms, created_at, model`
+const resultColsFull = `id, run_id, plan_id, account_id, account_name, platform, kind, outcome, reason, detail, output, score, metrics, duration_ms, created_at, model`
 
 func scanResult(r rowScanner) (*ResultRecord, error) {
 	var rec ResultRecord
 	var kind, outcome, reason string
 	var metrics []byte
 	if err := r.Scan(&rec.ID, &rec.RunID, &rec.PlanID, &rec.AccountID, &rec.AccountName, &rec.Platform,
-		&kind, &outcome, &reason, &rec.Detail, &rec.Output, &rec.Score, &metrics, &rec.DurationMs, &rec.CreatedAt); err != nil {
+		&kind, &outcome, &reason, &rec.Detail, &rec.Output, &rec.Score, &metrics, &rec.DurationMs, &rec.CreatedAt, &rec.Model); err != nil {
 		return nil, err
 	}
 	rec.Kind, rec.Outcome, rec.Reason = TestKind(kind), Outcome(outcome), Reason(reason)

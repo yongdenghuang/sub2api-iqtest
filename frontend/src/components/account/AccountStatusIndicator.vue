@@ -1,4 +1,5 @@
 <template>
+  <div class="flex flex-col gap-1">
   <div class="flex items-center gap-2">
     <!-- Rate Limit Display (429) - Two-line layout -->
     <div v-if="isRateLimited" class="flex flex-col items-center gap-1">
@@ -156,10 +157,13 @@
       </div>
     </div>
   </div>
+  <p v-if="hasError" class="max-w-[150px] text-[11px] leading-4 text-red-600 dark:text-red-400" data-account-error-reason>{{ t(`iqtest.reason.${accountErrorReason(account.error_message)}`) }}</p>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { accountErrorReason } from '@/utils/accountErrorReason'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import type { Account } from '@/types'
@@ -177,7 +181,7 @@ const emit = defineEmits<{
 
 // Computed: is rate limited (429)
 const isRateLimited = computed(() => {
-  if (!props.account.rate_limit_reset_at) return false
+  if (props.account.status === 'error' || !props.account.rate_limit_reset_at) return false
   return new Date(props.account.rate_limit_reset_at) > new Date()
 })
 
@@ -269,7 +273,7 @@ const formatScopeName = (scope: string): string => {
 
 // Computed: is overloaded (529)
 const isOverloaded = computed(() => {
-  if (!props.account.overload_until) return false
+  if (props.account.status === 'error' || !props.account.overload_until) return false
   return new Date(props.account.overload_until) > new Date()
 })
 

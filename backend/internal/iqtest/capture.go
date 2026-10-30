@@ -33,6 +33,7 @@ type PinnedRequest struct {
 
 // Capture is everything observed while the account test ran.
 type Capture struct {
+	Model       string              // test_start reports the actual model after account mapping
 	Events      []service.TestEvent // all events except "content"
 	Text        string              // concatenated "content" text
 	Complete    bool                // a test_complete event was seen
@@ -106,6 +107,9 @@ func parseSSE(body string) Capture {
 			}
 		} else {
 			out.Events = append(out.Events, ev)
+		}
+		if ev.Type == "test_start" && ev.Model != "" {
+			out.Model = ev.Model
 		}
 		if ev.Type == "test_complete" {
 			out.Complete = true

@@ -6,6 +6,7 @@ import zh from '@/i18n/locales/zh/iqtest'
 import IQAccountCell from '../IQAccountCell.vue'
 import IQResultListDialog from '../IQResultListDialog.vue'
 import IQResultDetail from '../IQResultDetail.vue'
+import IQResultHistory from '../IQResultHistory.vue'
 import { svgPreviewSource } from '../svgPreview'
 
 vi.mock('vue-i18n', () => ({
@@ -171,5 +172,21 @@ describe('visual quality verdicts', () => {
     expect(wrapper.get('button').text()).toContain(zh.iqtest.visual.unreviewed)
     expect(wrapper.find('.badge-success, .bg-green-500').exists()).toBe(false)
     wrapper.unmount()
+  })
+})
+
+
+describe('test model and actionable errors', () => {
+  it.each(['candy', 'pelican_svg'] as const)('shows each %s history model without guessing missing historical values', kind => {
+    const wrapper = mount(IQResultHistory, { props: { items: [{ ...result(12), kind, model: 'gpt-6-luna' }, { ...result(11), kind }], selectedId: null, loading: false, recent: kind === 'pelican_svg' } })
+    expect(wrapper.findAll('[data-iq-model]').map(x => x.text())).toEqual(['gpt-6-luna', zh.iqtest.result.modelUnknown])
+    const detail = mount(IQResultDetail, { props: { result: { ...result(12), kind, model: 'gpt-6-luna' } } })
+    expect(detail.get('[data-iq-model]').text()).toContain('gpt-6-luna')
+  })
+  it.each(['candy', 'pelican_svg'] as const)('shows the actual %s failure instead of infrastructure error', kind => {
+    const wrapper = mount(IQAccountCell, { props: { states: [{ ...state, kind, last_outcome: 'infra_error', last_reason: 'auth_expired' }] }, global: globalOptions })
+    expect(wrapper.get('button').text()).toContain(zh.iqtest.reason.auth_expired)
+    expect(wrapper.get('button').text()).not.toContain('基础设施错误')
+    expect(wrapper.get('.badge').classes()).toContain('badge-warning')
   })
 })
