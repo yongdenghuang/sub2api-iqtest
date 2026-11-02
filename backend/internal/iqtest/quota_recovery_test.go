@@ -44,6 +44,7 @@ func TestQuotaRecoveryHonorsPlanChangesAndSchedule(t *testing.T) {
 	}{
 		{"disabled plan", false, []int64{1}, 0},
 		{"account removed from scope", true, []int64{2}, 0},
+		{"test removed from plan", true, []int64{1}, 0},
 		{"only recovered account", true, []int64{1, 2}, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -54,6 +55,9 @@ func TestQuotaRecoveryHonorsPlanChangesAndSchedule(t *testing.T) {
 			p.Enabled = tc.enabled
 			p.ScopeType = ScopeAccounts
 			p.AccountIDs = tc.ids
+			if tc.name == "test removed from plan" {
+				p.Checks = []CheckConfig{{Kind: TestPelicanSVG}}
+			}
 			next := time.Now().Add(24 * time.Hour)
 			cfg, err := json.Marshal(p)
 			require.NoError(t, err)

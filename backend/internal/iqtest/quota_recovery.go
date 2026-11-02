@@ -185,6 +185,22 @@ func (s *Scheduler) launchQuotaRecovery(ctx context.Context, pending []quotaBloc
 				}
 			}
 		}
+		// Editing a plan may remove one test while leaving the account in scope.
+		// Do not create empty recovery runs for that historical test forever.
+		configured := map[TestKind]bool{}
+		for _, check := range p.Checks {
+			configured[check.Kind] = true
+		}
+		for id, kinds := range checks {
+			for kind := range kinds {
+				if !configured[kind] {
+					delete(kinds, kind)
+				}
+			}
+			if len(kinds) == 0 {
+				delete(checks, id)
+			}
+		}
 		clone := *p
 		clone.ScopeType, clone.GroupIDs, clone.AccountIDs = ScopeAccounts, nil, nil
 		for id := range checks {
