@@ -59,8 +59,19 @@ type openAIQuotaResetResponse struct {
 // failed display-cache write must never discard a successful upstream read.
 type openAIQuotaRefreshResponse struct {
 	service.OpenAIQuotaUsage
-	CachePersisted        bool `json:"cache_persisted"`
-	CreditsCachePersisted bool `json:"credits_cache_persisted"`
+	CachePersisted        bool         `json:"cache_persisted"`
+	CreditsCachePersisted bool         `json:"credits_cache_persisted"`
+	Account               *dto.Account `json:"account,omitempty"`
+}
+
+// IQTestQuota exposes read/probe recovery, never the credit consumption API.
+func (h *OpenAIOAuthHandler) IQTestQuota() interface {
+	RefreshUsage(context.Context, int64) (*service.OpenAIQuotaUsage, error)
+} {
+	q, _ := h.quotaService.(interface {
+		RefreshUsage(context.Context, int64) (*service.OpenAIQuotaUsage, error)
+	})
+	return q
 }
 
 // openAIQuotaResetPostProcessContext detaches the post-reset bookkeeping from the
@@ -514,7 +525,12 @@ func (h *OpenAIOAuthHandler) RefreshQuota(c *gin.Context) {
 		return
 	}
 
-	usage, err := h.quotaService.QueryUsage(c.Request.Context(), accountID)
+	var usage *service.OpenAIQuotaUsage
+	if recovery := h.IQTestQuota(); recovery != nil {
+		usage, err = recovery.RefreshUsage(c.Request.Context(), accountID)
+	} else {
+		usage, err = h.quotaService.QueryUsage(c.Request.Context(), accountID)
+	}
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -526,6 +542,11 @@ func (h *OpenAIOAuthHandler) RefreshQuota(c *gin.Context) {
 	service.NotifyOpenAIAutoResetCredit(accountID)
 
 	refreshResponse := openAIQuotaRefreshResponse{OpenAIQuotaUsage: *usage}
+	if usage.RateLimitRecovered && h.adminService != nil {
+		if account, loadErr := h.adminService.GetAccount(c.Request.Context(), accountID); loadErr == nil {
+			refreshResponse.Account = dto.AccountFromService(account)
+		}
+	}
 	if err := h.quotaService.CacheCreditsSnapshot(c.Request.Context(), accountID, usage); err != nil {
 		slog.Warn("openai_quota_credits_cache_persist_failed", "account_id", accountID, "error", err)
 	} else {

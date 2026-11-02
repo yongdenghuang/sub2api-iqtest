@@ -942,6 +942,30 @@ func (s *AccountRepoSuite) TestClearRateLimitIfObservedProtectsRearmed429Generat
 	s.Require().WithinDuration(rearmedReset, *retyped.RateLimitResetAt, time.Second)
 }
 
+func (s *AccountRepoSuite) TestOpenAIQuotaRecoveryOnlyClearsObservedActiveCooldown() {
+	a := mustCreateAccount(s.T(), s.client, &service.Account{Name: "quota-recovery-cas", Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth, Status: service.StatusActive})
+	reset := time.Now().Add(72 * time.Hour).UTC().Truncate(time.Second)
+	s.Require().NoError(s.repo.SetRateLimited(s.ctx, a.ID, reset))
+	old, err := s.repo.GetByID(s.ctx, a.ID)
+	s.Require().NoError(err)
+	// Auth can fail while the usage read is in flight; don't clear that row.
+	s.Require().NoError(s.repo.SetError(s.ctx, a.ID, "token_revoked"))
+	cleared, err := s.repo.ClearOpenAIQuotaRateLimitIfObserved(s.ctx, a.ID, *old.RateLimitedAt, *old.RateLimitResetAt)
+	s.Require().NoError(err)
+	s.Require().False(cleared)
+	s.Require().NoError(s.repo.ClearError(s.ctx, a.ID))
+	cleared, err = s.repo.ClearOpenAIQuotaRateLimitIfObserved(s.ctx, a.ID, *old.RateLimitedAt, *old.RateLimitResetAt)
+	s.Require().NoError(err)
+	s.Require().True(cleared)
+	s.Require().NoError(s.repo.SetRateLimited(s.ctx, a.ID, reset.Add(time.Hour)))
+	cleared, err = s.repo.ClearOpenAIQuotaRateLimitIfObserved(s.ctx, a.ID, *old.RateLimitedAt, *old.RateLimitResetAt)
+	s.Require().NoError(err)
+	s.Require().False(cleared)
+	current, err := s.repo.GetByID(s.ctx, a.ID)
+	s.Require().NoError(err)
+	s.Require().NotNil(current.RateLimitResetAt)
+}
+
 func (s *AccountRepoSuite) TestClearRateLimit() {
 	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "acc-clear"})
 	until := time.Now().Add(1 * time.Hour)

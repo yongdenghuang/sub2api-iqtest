@@ -45,13 +45,14 @@ type RunStats struct {
 
 // Prepared is a run whose accounts are resolved and whose row exists.
 type Prepared struct {
-	Plan        *Plan
-	RunID       int64
-	Trigger     string
-	Accounts    []*service.Account
-	reserved    int64 // request budget counter
-	reviewers   []*service.Account
-	reviewError string
+	Plan           *Plan
+	RunID          int64
+	Trigger        string
+	Accounts       []*service.Account
+	RecoveryChecks map[int64]map[TestKind]bool
+	reserved       int64 // request budget counter
+	reviewers      []*service.Account
+	reviewError    string
 }
 
 // Engine pins generation to each target account and chooses a separate healthy
@@ -231,7 +232,21 @@ loop:
 }
 
 func (e *Engine) runAccount(ctx context.Context, pr *Prepared, a *service.Account, count func(Result)) {
+	if pr.RecoveryChecks != nil && (!a.Schedulable || (a.AutoPauseOnExpired && a.ExpiresAt != nil && !a.ExpiresAt.After(e.now()))) {
+		return
+	}
 	for _, chk := range pr.Plan.Checks {
+		if pr.RecoveryChecks != nil {
+			if !pr.RecoveryChecks[a.ID][chk.Kind] {
+				continue
+			}
+			// A normal scheduled/manual run may have finished since the probe.
+			// Never repeat a check whose latest result has already recovered.
+			st, ok, err := e.repo.GetState(ctx, a.ID, chk.Kind)
+			if err != nil || !ok || !quotaBlocked(st) {
+				continue
+			}
+		}
 		if ctx.Err() != nil {
 			return
 		}

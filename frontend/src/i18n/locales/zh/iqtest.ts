@@ -143,7 +143,7 @@ export default {
       accounts: '账号数',
       requests: '请求数',
       detail: '运行详情',
-      triggers: { schedule: '定时', manual: '手动', adhoc: '临时' },
+      triggers: { schedule: '定时', manual: '手动', adhoc: '临时', quota_recovery: '额度恢复补测' },
       statuses: { running: '运行中', done: '完成', aborted: '中止' }
     },
     result: {

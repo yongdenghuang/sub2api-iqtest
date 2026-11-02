@@ -104,6 +104,7 @@ type OpenAIQuotaUsage struct {
 	RateLimitResetCredits *OpenAIRateLimitResetCredits `json:"rate_limit_reset_credits,omitempty"`
 	Credits               *OpenAICredits               `json:"credits,omitempty"`
 	FetchedAt             int64                        `json:"fetched_at"`
+	RateLimitRecovered    bool                         `json:"rate_limit_recovered,omitempty"`
 	autoResetCandidates   []openAIAutoResetCreditCandidate
 }
 

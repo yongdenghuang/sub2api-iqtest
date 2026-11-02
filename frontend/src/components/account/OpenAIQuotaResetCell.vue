@@ -444,6 +444,7 @@ const handleQuery = async () => {
   try {
     const result = await refreshOpenAIQuota(accountID)
     if (props.account.id !== accountID) return
+    if (result.account) emit('account-updated', result.account)
     updateCredits(result)
     creditsCacheWarning.value = result.credits_cache_persisted === false
     // The upstream read succeeded even when the snapshot write was rejected, so

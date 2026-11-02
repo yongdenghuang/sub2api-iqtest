@@ -18,6 +18,7 @@ type Deps struct {
 	Accounts AccountSource
 	Tester   AccountTester
 	Models   ModelCatalog
+	Quota    QuotaRecovery
 }
 
 // Service is the running iqtest feature.
@@ -56,6 +57,11 @@ func Setup(d Deps) (*Service, error) {
 	engine := NewEngine(store, d.Accounts, d.Tester)
 	engine.models = d.Models
 	sched := NewScheduler(store, engine, d.Redis, loc)
+	// Deployment validation explicitly disables OAuth refresh to preserve
+	// credentials. Do not start new credential-using background probes there.
+	if d.Cfg.TokenRefresh.Enabled {
+		sched.quota = d.Quota
+	}
 	sched.Start()
 	return &Service{store: store, engine: engine, sched: sched, loc: loc}, nil
 }

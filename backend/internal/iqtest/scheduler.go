@@ -20,10 +20,12 @@ var unlockScript = redis.NewScript(`if redis.call("get", KEYS[1]) == ARGV[1] the
 
 // Scheduler wakes up every minute and starts the plans that are due.
 type Scheduler struct {
-	store  *Store
-	engine *Engine
-	rdb    *redis.Client // optional: serialises plans across instances
-	loc    *time.Location
+	store      *Store
+	engine     *Engine
+	quota      QuotaRecovery
+	recoveryMu sync.Mutex
+	rdb        *redis.Client // optional: serialises plans across instances
+	loc        *time.Location
 
 	cron      *cron.Cron
 	running   sync.Map // plan id -> struct{}
@@ -46,6 +48,9 @@ func (s *Scheduler) Start() {
 			return
 		}
 		s.cron = c
+		if s.quota != nil {
+			_, _ = c.AddFunc("* * * * *", s.recoverQuota)
+		}
 		c.Start()
 		slog.Info("iqtest: scheduler started (tick every minute)")
 	})
@@ -121,6 +126,10 @@ func (s *Scheduler) RunAdHoc(ctx context.Context, p *Plan) (int64, error) {
 }
 
 func (s *Scheduler) start(ctx context.Context, p *Plan, trigger string) (int64, error) {
+	return s.startFiltered(ctx, p, trigger, nil)
+}
+
+func (s *Scheduler) startFiltered(ctx context.Context, p *Plan, trigger string, checks map[int64]map[TestKind]bool) (int64, error) {
 	if _, loaded := s.running.LoadOrStore(p.ID, struct{}{}); loaded {
 		return 0, ErrAlreadyRunning
 	}
@@ -138,6 +147,7 @@ func (s *Scheduler) start(ctx context.Context, p *Plan, trigger string) (int64, 
 		finish()
 		return 0, err
 	}
+	pr.RecoveryChecks = checks
 	go func() {
 		defer finish()
 		s.engine.Execute(context.Background(), pr)

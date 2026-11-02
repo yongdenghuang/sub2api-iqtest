@@ -143,7 +143,7 @@ export default {
       accounts: 'Accounts',
       requests: 'Requests',
       detail: 'Run details',
-      triggers: { schedule: 'Schedule', manual: 'Manual', adhoc: 'Ad hoc' },
+      triggers: { schedule: 'Schedule', manual: 'Manual', adhoc: 'Ad hoc', quota_recovery: 'Quota recovery' },
       statuses: { running: 'Running', done: 'Done', aborted: 'Aborted' }
     },
     result: {

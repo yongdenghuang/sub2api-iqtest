@@ -2333,14 +2333,28 @@ func (r *accountRepository) SetRateLimitedIfLater(ctx context.Context, id int64,
 // by a successful request. Matching both timestamps prevents a stale success
 // from erasing a later clear/re-arm generation with an equal or shorter reset.
 func (r *accountRepository) ClearRateLimitIfObserved(ctx context.Context, id int64, observedLimitedAt, observedResetAt time.Time) (bool, error) {
-	updated, err := r.client.Account.Update().
+	return r.clearOAuthRateLimitIfObserved(ctx, id, service.PlatformGrok, observedLimitedAt, observedResetAt)
+}
+
+// ClearOpenAIQuotaRateLimitIfObserved only recovers the active OpenAI OAuth row
+// observed before the quota read, never a repurposed account or a newer 429.
+func (r *accountRepository) ClearOpenAIQuotaRateLimitIfObserved(ctx context.Context, id int64, observedLimitedAt, observedResetAt time.Time) (bool, error) {
+	return r.clearOAuthRateLimitIfObserved(ctx, id, service.PlatformOpenAI, observedLimitedAt, observedResetAt)
+}
+
+func (r *accountRepository) clearOAuthRateLimitIfObserved(ctx context.Context, id int64, platform string, observedLimitedAt, observedResetAt time.Time) (bool, error) {
+	update := r.client.Account.Update().
 		Where(
 			dbaccount.IDEQ(id),
-			dbaccount.PlatformEQ(service.PlatformGrok),
+			dbaccount.PlatformEQ(platform),
 			dbaccount.TypeEQ(service.AccountTypeOAuth),
 			dbaccount.RateLimitedAtEQ(observedLimitedAt),
 			dbaccount.RateLimitResetAtEQ(observedResetAt),
-		).
+		)
+	if platform == service.PlatformOpenAI {
+		update = update.Where(dbaccount.StatusEQ(service.StatusActive))
+	}
+	updated, err := update.
 		ClearRateLimitedAt().
 		ClearRateLimitResetAt().
 		Save(ctx)

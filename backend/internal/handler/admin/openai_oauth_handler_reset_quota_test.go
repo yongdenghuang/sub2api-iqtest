@@ -101,6 +101,31 @@ type openAIQuotaRefreshEnvelope struct {
 	Data openAIQuotaRefreshResponse `json:"data"`
 }
 
+type quotaRecoveryWorkflowStub struct {
+	*openAIQuotaWorkflowStub
+	refreshCalls int
+}
+
+func (s *quotaRecoveryWorkflowStub) RefreshUsage(context.Context, int64) (*service.OpenAIQuotaUsage, error) {
+	s.refreshCalls++
+	return s.queryResult, s.queryErr
+}
+
+func TestOpenAIRefreshQuotaReturnsRecoveredAccountWithoutUsingCard(t *testing.T) {
+	quota := &quotaRecoveryWorkflowStub{openAIQuotaWorkflowStub: successfulOpenAIQuotaWorkflowStub()}
+	quota.queryResult.RateLimitRecovered = true
+	admin := &openAIResetAdminServiceStub{account: &service.Account{ID: 1, Status: service.StatusActive, Schedulable: true}}
+	h := &OpenAIOAuthHandler{quotaService: quota, adminService: admin}
+	status, result := performOpenAIQuotaRefreshRequest(t, h)
+	require.Equal(t, http.StatusOK, status)
+	require.True(t, result.Data.RateLimitRecovered)
+	require.NotNil(t, result.Data.Account)
+	require.Nil(t, result.Data.Account.RateLimitResetAt)
+	require.Equal(t, 1, quota.refreshCalls)
+	require.Zero(t, quota.queryCalls)
+	require.Zero(t, quota.resetCalls)
+}
+
 func performOpenAIQuotaResetRequest(t *testing.T, handler *OpenAIOAuthHandler) (int, openAIQuotaResetEnvelope) {
 	t.Helper()
 	return performOpenAIQuotaResetRequestWithContext(t, handler, nil)

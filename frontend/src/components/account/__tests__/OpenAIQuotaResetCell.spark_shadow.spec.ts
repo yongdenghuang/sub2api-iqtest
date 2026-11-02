@@ -67,6 +67,18 @@ beforeEach(() => {
 })
 
 describe('OpenAIQuotaResetCell — Codex 点数', () => {
+  it('查询确认额度恢复后同步账号状态，不使用重置卡', async () => {
+    const recovered = makeAccount({ rate_limit_reset_at: null, rate_limited_at: null })
+    vi.mocked(refreshOpenAIQuota).mockResolvedValue({
+      fetched_at: 1770000000, cache_persisted: true, rate_limit_recovered: true, account: recovered,
+    })
+    const wrapper = mount(OpenAIQuotaResetCell, { props: { account: makeAccount({ rate_limit_reset_at: '2099-11-07T00:00:00Z' }) } })
+    await wrapper.findAll('button')[0].trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('account-updated')).toEqual([[recovered]])
+    expect(resetOpenAIQuota).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
   const points = (wrapper: ReturnType<typeof mount>) => wrapper.get('[data-testid="codex-credits"]')
   const balance = { has_credits: true, unlimited: false, balance: '12345678901234567890.0123' }
 
