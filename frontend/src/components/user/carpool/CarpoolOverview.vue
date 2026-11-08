@@ -22,7 +22,7 @@
             <h3 class="break-words text-base font-semibold text-gray-900 dark:text-white">{{ g.name }}</h3>
             <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               <span class="rounded-md bg-emerald-50 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">OpenAI</span>
-              <span>{{ t('userCarpool.sharing', { count: g.member_count }) }}</span>
+              <span>{{ t('userCarpool.sharing', { count: g.member_count }) }} · {{ t(g.allocation_mode === 'manual' ? 'userCarpool.manual' : 'userCarpool.auto') }}</span>
             </div>
           </div>
         </div>
@@ -32,7 +32,7 @@
       <div class="space-y-4 px-5 pb-5">
         <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <div class="rounded-xl bg-gray-50 p-3 dark:bg-dark-900/50">
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('userCarpool.total') }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t(g.allocation_mode === 'manual' ? 'userCarpool.manualTotal' : 'userCarpool.autoTotal') }}</p>
             <p class="mt-1 text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{{ allocation(g, g.total_usd) }}</p>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('userCarpool.spent', { amount: money(g.used_usd) }) }}</p>
           </div>
@@ -65,7 +65,7 @@
             <span>{{ t('userCarpool.nextReset') }}：<span class="text-gray-700 dark:text-gray-200">{{ date(g.next_reset_at) }}</span></span>
             <span class="font-medium text-primary-700 dark:text-primary-300">{{ countdown(g.next_reset_at) }}</span>
           </div>
-          <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ g.upstream_capacity_usd === null ? t('userCarpool.samplingHint') : t('userCarpool.capacity', { amount: money(g.upstream_capacity_usd) }) }}</p>
+          <p v-if="g.allocation_mode !== 'manual'" class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ g.upstream_capacity_usd === null ? t('userCarpool.samplingHint') : t('userCarpool.capacity', { amount: money(g.upstream_capacity_usd) }) }}</p>
           <p v-if="['delayed', 'pending_reset', 'adjusting', 'waiting'].includes(status(g))" class="mt-2 text-xs text-amber-700 dark:text-amber-300">{{ t(`userCarpool.hint.${status(g)}`) }}</p>
         </div>
 
@@ -89,7 +89,8 @@
           </table>
         </div>
         <footer class="space-y-1 border-t border-gray-100 pt-3 text-xs leading-relaxed text-gray-500 dark:border-dark-700 dark:text-gray-400">
-          <p>{{ t('userCarpool.allocationHint') }}</p>
+          <p>{{ t(g.allocation_mode === 'manual' ? 'userCarpool.manualHint' : 'userCarpool.allocationHint') }}</p>
+          <p>{{ t(g.sync_official_reset ? 'userCarpool.syncResetHint' : 'userCarpool.localResetHint') }}</p>
           <p>{{ t('userCarpool.lastSync') }}：{{ date(g.last_sync_at) }} · {{ t('userCarpool.cadence') }}</p>
         </footer>
       </div>
@@ -120,7 +121,7 @@ const self = (g: MyCarpool) => g.members.find(m => m.is_self)
 const date = (value: string | null) => value ? new Date(value).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US') : '—'
 function status(g: MyCarpool): MyCarpool['status'] {
   if (error.value || (g.last_sync_at && now.value - Date.parse(g.last_sync_at) > 180000)) return 'delayed'
-  if (g.next_reset_at && Date.parse(g.next_reset_at) <= now.value && g.status !== 'delayed') return 'pending_reset'
+  if (g.sync_official_reset && g.next_reset_at && Date.parse(g.next_reset_at) <= now.value && g.status !== 'delayed') return 'pending_reset'
   return g.status
 }
 function countdown(value: string | null) {

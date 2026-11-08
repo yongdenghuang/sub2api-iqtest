@@ -7,7 +7,7 @@ import zh from '@/i18n/locales/zh/carpool'
 
 vi.mock('@/api/carpool', () => ({ getMyCarpools: vi.fn() }))
 const sample: MyCarpool = {
-  id: 12, name: '四人车', member_count: 4, allocation_ready: true,
+  id: 12, name: '四人车', member_count: 4, allocation_ready: true, allocation_mode: 'auto', sync_official_reset: true,
   total_usd: 2400, used_usd: 400, remaining_usd: 2000, per_member_usd: 600,
   estimated: false, upstream_capacity_usd: null, official_used_percent: 25,
   last_sync_at: '2026-11-08T10:00:00Z', next_reset_at: '2026-11-14T10:00:00Z', status: 'sampling',
@@ -51,6 +51,30 @@ describe('member shared quota overview', () => {
     expect(w.text()).toContain('并非官方美元余额')
     expect(w.text()).not.toContain('$2,400.00')
     expect(w.text()).toContain('已同步')
+  })
+  it('shows manual totals and remaining quota, then follows an administrator mode change', async () => {
+    vi.mocked(getMyCarpools).mockResolvedValue([{ ...sample, allocation_mode: 'manual', status: 'synced' }])
+    const w = setup(); await flushPromises()
+    expect(w.text()).toContain('4 位车友 · 手动额度')
+    expect(w.text()).toContain('手动设定总额度')
+    expect(w.text()).toContain('$2,400.00')
+    expect(w.text()).toContain('$2,000.00')
+    expect(w.text()).not.toContain('采样中')
+    expect(w.text()).toContain('不随官方用量或人数自动调整')
+    expect(w.text()).toContain('已开启同步官方重置')
+    vi.mocked(getMyCarpools).mockResolvedValue([{ ...sample, total_usd: 2000, estimated: true, upstream_capacity_usd: 2600, status: 'synced' }])
+    await vi.advanceTimersByTimeAsync(30000); await flushPromises()
+    expect(w.text()).toContain('4 位车友 · 动态均分')
+    expect(w.text()).toContain('当前动态分配总额')
+    expect(w.text()).toContain('上游整周额度估算 $2,600.00')
+    expect(w.text()).not.toContain('手动设定总额度')
+  })
+  it('labels upstream countdown as reference when ordinary local resets are used', async () => {
+    vi.mocked(getMyCarpools).mockResolvedValue([{ ...sample, allocation_mode: 'manual', sync_official_reset: false, next_reset_at: '2026-11-08T09:59:00Z', status: 'synced' }])
+    const w = setup(); await flushPromises()
+    expect(w.text()).toContain('本车采用本站原有按周重置规则')
+    expect(w.text()).toContain('倒计时仅供参考')
+    expect(w.text()).not.toContain('重置确认中')
   })
   it('shows unknown rather than zero official use before the first sync', async () => {
     vi.mocked(getMyCarpools).mockResolvedValue([{ ...sample, allocation_ready: false, official_used_percent: null, last_sync_at: null, next_reset_at: null, status: 'waiting' }])

@@ -1,6 +1,12 @@
 import { apiClient } from '../client'
 
-export interface CarpoolConfig { enabled: boolean; initial_total_usd: number }
+export interface CarpoolConfig {
+  enabled: boolean
+  initial_total_usd: number
+  allocation_mode?: 'manual' | 'auto'
+  manual_weekly_usd?: number
+  sync_official_reset?: boolean
+}
 export interface CarpoolState {
   reset_at?: string
   checked_at?: string

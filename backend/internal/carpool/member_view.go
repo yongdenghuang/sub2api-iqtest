@@ -25,6 +25,8 @@ type MemberGroupView struct {
 	Name                string       `json:"name"`
 	MemberCount         int          `json:"member_count"`
 	AllocationReady     bool         `json:"allocation_ready"`
+	AllocationMode      string       `json:"allocation_mode"`
+	SyncOfficialReset   bool         `json:"sync_official_reset"`
 	TotalUSD            float64      `json:"total_usd"`
 	UsedUSD             float64      `json:"used_usd"`
 	RemainingUSD        float64      `json:"remaining_usd"`
@@ -51,7 +53,7 @@ func (s *Service) ListForMember(ctx context.Context, userID int64) ([]MemberGrou
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	rows, err := tx.QueryContext(ctx, `SELECT g.id,g.name,COALESCE(g.weekly_limit_usd,0),cg.state
+	rows, err := tx.QueryContext(ctx, `SELECT g.id,g.name,COALESCE(g.weekly_limit_usd,0),cg.state,cg.allocation_mode,cg.sync_official_reset
  FROM carpool_groups cg JOIN groups g ON g.id=cg.group_id
  WHERE cg.enabled AND g.deleted_at IS NULL AND g.status='active'
  AND g.platform='openai' AND g.subscription_type='subscription'
@@ -66,7 +68,7 @@ func (s *Service) ListForMember(ctx context.Context, userID int64) ([]MemberGrou
 	for rows.Next() {
 		var g MemberGroupView
 		var raw []byte
-		if err = rows.Scan(&g.ID, &g.Name, &g.PerMemberUSD, &raw); err != nil {
+		if err = rows.Scan(&g.ID, &g.Name, &g.PerMemberUSD, &raw, &g.AllocationMode, &g.SyncOfficialReset); err != nil {
 			break
 		}
 		var st State
@@ -138,8 +140,9 @@ func completeMemberView(g *MemberGroupView, st State, now time.Time) {
 		// must not remove another member's remaining allowance from the display.
 		g.RemainingUSD += m.RemainingUSD
 	}
-	g.Estimated = st.Estimated
-	if st.Estimated && finite(st.Capacity) && st.Capacity > 0 {
+	automatic := g.AllocationMode != AllocationManual
+	g.Estimated = automatic && st.Estimated
+	if g.Estimated && finite(st.Capacity) && st.Capacity > 0 {
 		g.UpstreamCapacityUSD = &st.Capacity
 	}
 	if !st.ResetAt.IsZero() {
@@ -158,11 +161,11 @@ func completeMemberView(g *MemberGroupView, st State, now time.Time) {
 		g.Status = "waiting"
 	case now.Sub(st.CheckedAt) > 3*time.Minute:
 		g.Status = "delayed"
-	case !st.Candidate.IsZero() || (!st.ResetAt.IsZero() && !st.ResetAt.After(now)):
+	case g.SyncOfficialReset && (!st.Candidate.IsZero() || (!st.ResetAt.IsZero() && !st.ResetAt.After(now))):
 		g.Status = "pending_reset"
-	case !st.DropAt.IsZero() || st.Members != g.MemberCount:
+	case automatic && (!st.DropAt.IsZero() || st.Members != g.MemberCount):
 		g.Status = "adjusting"
-	case !st.Estimated:
+	case automatic && !st.Estimated:
 		g.Status = "sampling"
 	default:
 		g.Status = "synced"

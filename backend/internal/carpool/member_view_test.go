@@ -28,7 +28,7 @@ func TestMemberSummaryRetainsOverspentAndStaleQuota(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			state := st
 			tc.change(&state)
-			g := MemberGroupView{PerMemberUSD: 100, Members: []MemberView{{UsedUSD: 150, RemainingUSD: 0}, {UsedUSD: 20, RemainingUSD: 80}}}
+			g := MemberGroupView{PerMemberUSD: 100, SyncOfficialReset: true, Members: []MemberView{{UsedUSD: 150, RemainingUSD: 0}, {UsedUSD: 20, RemainingUSD: 80}}}
 			completeMemberView(&g, state, now)
 			require.Equal(t, 200.0, g.TotalUSD)
 			require.Equal(t, 170.0, g.UsedUSD)
@@ -47,4 +47,18 @@ func TestMemberSummaryRetainsOverspentAndStaleQuota(t *testing.T) {
 	require.Nil(t, g.LastSyncAt)
 	require.Nil(t, g.UpstreamCapacityUSD)
 	require.Equal(t, "waiting", g.Status)
+}
+
+func TestManualMemberSummaryDoesNotClaimSamplingOrAutomaticAdjustments(t *testing.T) {
+	now := time.Now()
+	st := State{CheckedAt: now, ResetAt: now.Add(-time.Minute), Estimated: true, Capacity: 1000, Members: 5, DropAt: now}
+	g := MemberGroupView{AllocationMode: AllocationManual, PerMemberUSD: 600, Members: []MemberView{{UsedUSD: 100, RemainingUSD: 500}}}
+	completeMemberView(&g, st, now)
+	require.Equal(t, "synced", g.Status)
+	require.Equal(t, 600.0, g.TotalUSD)
+	require.False(t, g.Estimated)
+	require.Nil(t, g.UpstreamCapacityUSD)
+	g = MemberGroupView{AllocationMode: AllocationManual, SyncOfficialReset: true, PerMemberUSD: 600}
+	completeMemberView(&g, st, now)
+	require.Equal(t, "pending_reset", g.Status)
 }

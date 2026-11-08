@@ -8,7 +8,7 @@ import { carpoolApi, type CarpoolGroup } from '@/api/admin/carpool'
 vi.mock('@/api/admin/carpool', () => ({ carpoolApi: { list: vi.fn(), save: vi.fn(), sync: vi.fn(), events: vi.fn() } }))
 const group: CarpoolGroup = {
   id: 12, name: '四人车', account_id: 2, account_name: 'Source', account_count: 1, eligible: true, weekly_limit: 600,
-  config: { enabled: true, initial_total_usd: 2400 },
+  config: { enabled: true, initial_total_usd: 2400, allocation_mode: 'auto', manual_weekly_usd: 600, sync_official_reset: true },
   state: { percent: 25, checked_at: '2026-11-08T10:00:00Z', reset_at: '2026-11-14T10:00:00Z', estimated: false },
   members: [{ id: 1, user_id: 4, name: 'Member', usage: 100 }]
 }
@@ -25,7 +25,7 @@ describe('shared subscription quota controls', () => {
     expect((wrapper.get('input[type="number"]').element as HTMLInputElement).value).toBe('3200')
     expect(carpoolApi.save).not.toHaveBeenCalled()
     await wrapper.get('form').trigger('submit'); await flushPromises()
-    expect(carpoolApi.save).toHaveBeenCalledWith(12, { enabled: true, initial_total_usd: 3200 })
+    expect(carpoolApi.save).toHaveBeenCalledWith(12, { ...group.config, initial_total_usd: 3200 })
     wrapper.unmount()
   })
   it('allows disabling after a source binding becomes invalid', async () => {
@@ -36,7 +36,35 @@ describe('shared subscription quota controls', () => {
     await wrapper.get('input[type="checkbox"]').setValue(false)
     expect(submit.attributes('disabled')).toBeUndefined()
     await wrapper.get('form').trigger('submit'); await flushPromises()
-    expect(carpoolApi.save).toHaveBeenCalledWith(12, { enabled: false, initial_total_usd: 2400 })
+    expect(carpoolApi.save).toHaveBeenCalledWith(12, { ...group.config, enabled: false })
+    wrapper.unmount()
+  })
+  it('switches an estimated pool to an editable manual cap without tying it to resets', async () => {
+    const estimated = { ...structuredClone(group), weekly_limit: 292.30, config: { ...group.config, manual_weekly_usd: 292.30 }, state: { ...group.state, estimated: true, capacity: 1034.35 } }
+    vi.mocked(carpoolApi.list).mockResolvedValue([estimated])
+    const wrapper = setup(); await flushPromises()
+    expect(wrapper.get('input[type="number"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('select').setValue('manual')
+    expect(wrapper.get('input[type="number"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('input[type="number"]').setValue(600)
+    await wrapper.findAll('input[type="checkbox"]')[1].setValue(false)
+    await vi.advanceTimersByTimeAsync(30000); await flushPromises()
+    expect((wrapper.get('select').element as HTMLSelectElement).value).toBe('manual')
+    expect((wrapper.get('input[type="number"]').element as HTMLInputElement).value).toBe('600')
+    expect(wrapper.text()).toContain('采用本站原有按周重置规则')
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(carpoolApi.save).toHaveBeenCalledWith(12, { enabled: true, initial_total_usd: 2400, allocation_mode: 'manual', manual_weekly_usd: 600, sync_official_reset: false })
+    expect(wrapper.get('[role="status"]').text()).toContain('立即生效')
+    wrapper.unmount()
+  })
+  it('shows a manual pool total and refreshes the seed when switching back to auto', async () => {
+    vi.mocked(carpoolApi.list).mockResolvedValue([{ ...structuredClone(group), config: { ...group.config, allocation_mode: 'manual' }, state: { ...group.state, estimated: false } }])
+    const wrapper = setup(); await flushPromises()
+    expect(wrapper.text()).toContain('本车分配总额')
+    expect(wrapper.text()).not.toContain('采样中')
+    await wrapper.get('select').setValue('auto')
+    expect(wrapper.get('input[type="number"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.text()).toContain('直接使用 Codex')
     wrapper.unmount()
   })
   it('reports a failed manual sync without claiming success', async () => {

@@ -14,6 +14,8 @@ export interface MyCarpool {
   name: string
   member_count: number
   allocation_ready: boolean
+  allocation_mode: 'manual' | 'auto'
+  sync_official_reset: boolean
   total_usd: number
   used_usd: number
   remaining_usd: number

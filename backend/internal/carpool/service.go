@@ -37,8 +37,11 @@ type Service struct {
 }
 
 type Config struct {
-	Enabled         bool    `json:"enabled"`
-	InitialTotalUSD float64 `json:"initial_total_usd"`
+	Enabled           bool    `json:"enabled"`
+	InitialTotalUSD   float64 `json:"initial_total_usd"`
+	AllocationMode    string  `json:"allocation_mode,omitempty"`
+	ManualWeeklyUSD   float64 `json:"manual_weekly_usd"`
+	SyncOfficialReset *bool   `json:"sync_official_reset,omitempty"`
 }
 type Member struct {
 	ID     int64      `json:"id"`
@@ -64,6 +67,8 @@ const schema = `CREATE TABLE IF NOT EXISTS carpool_groups (
  group_id BIGINT PRIMARY KEY REFERENCES groups(id), account_id BIGINT NOT NULL REFERENCES accounts(id),
  enabled BOOLEAN NOT NULL DEFAULT false, initial_total_usd NUMERIC(20,8) NOT NULL CHECK(initial_total_usd>0),
  state JSONB NOT NULL DEFAULT '{}', updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+ ALTER TABLE carpool_groups ADD COLUMN IF NOT EXISTS allocation_mode TEXT NOT NULL DEFAULT 'auto' CHECK(allocation_mode IN ('auto','manual'));
+ ALTER TABLE carpool_groups ADD COLUMN IF NOT EXISTS sync_official_reset BOOLEAN NOT NULL DEFAULT true;
  CREATE UNIQUE INDEX IF NOT EXISTS carpool_enabled_account ON carpool_groups(account_id) WHERE enabled;
  CREATE TABLE IF NOT EXISTS carpool_events (id BIGSERIAL PRIMARY KEY,group_id BIGINT NOT NULL,
  kind TEXT NOT NULL, detail JSONB NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
@@ -167,7 +172,7 @@ func (s *Service) ManagesWeeklyWindow(id int64) bool {
 func (s *Service) refreshManaged(ctx context.Context) error {
 	s.policyMu.Lock()
 	defer s.policyMu.Unlock()
-	rows, err := s.db.QueryContext(ctx, "SELECT group_id FROM carpool_groups WHERE enabled")
+	rows, err := s.db.QueryContext(ctx, "SELECT group_id FROM carpool_groups WHERE enabled AND sync_official_reset")
 	if err != nil {
 		return err
 	}
@@ -217,7 +222,14 @@ func loadGroup(ctx context.Context, q querier, id int64) (Group, error) {
 		}
 	}
 	var data []byte
-	err = q.QueryRowContext(ctx, "SELECT enabled,initial_total_usd,state FROM carpool_groups WHERE group_id=$1", id).Scan(&g.Config.Enabled, &g.Config.InitialTotalUSD, &data)
+	var syncReset bool
+	err = q.QueryRowContext(ctx, "SELECT enabled,initial_total_usd,allocation_mode,sync_official_reset,state FROM carpool_groups WHERE group_id=$1", id).Scan(&g.Config.Enabled, &g.Config.InitialTotalUSD, &g.Config.AllocationMode, &syncReset, &data)
+	if err == nil {
+		g.Config.SyncOfficialReset = &syncReset
+	}
+	// The group's weekly cap is the single source of truth in manual mode.
+	// Native group edits must not be overwritten by a second stored copy.
+	g.Config.ManualWeeklyUSD = g.WeeklyLimit
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return g, err
 	}
@@ -277,56 +289,6 @@ func (s *Service) List(ctx context.Context) ([]Group, error) {
 		groups = append(groups, g)
 	}
 	return groups, nil
-}
-
-func (s *Service) Save(ctx context.Context, id int64, cfg Config) error {
-	if cfg.Enabled && (!finite(cfg.InitialTotalUSD) || cfg.InitialTotalUSD < 1 || cfg.InitialTotalUSD > 1000000) {
-		return errors.New("初始总周额度须为 1 至 1000000 美元")
-	}
-	conn, release, err := s.lock(ctx, id)
-	if err != nil {
-		return err
-	}
-	defer release()
-	// Disabling must remain possible even if the source/group became invalid.
-	if !cfg.Enabled {
-		_, err = conn.ExecContext(ctx, "UPDATE carpool_groups SET enabled=false,updated_at=now() WHERE group_id=$1", id)
-		if err == nil {
-			s.policyMu.Lock()
-			s.managed.Delete(id)
-			s.policyMu.Unlock()
-		}
-		return err
-	}
-	g, err := loadGroup(ctx, conn, id)
-	if err != nil {
-		return err
-	}
-	if !g.Eligible || g.AccountCount != 1 || g.AccountID == 0 {
-		return errors.New("请选择只绑定一个 OpenAI OAuth 上游账号的订阅分组")
-	}
-	if cfg.Enabled && len(g.Members) == 0 {
-		return errors.New("分组没有生效的订阅用户")
-	}
-	var previousAccount int64
-	err = conn.QueryRowContext(ctx, "SELECT account_id FROM carpool_groups WHERE group_id=$1", id).Scan(&previousAccount)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	if previousAccount > 0 && previousAccount != g.AccountID {
-		return errors.New("上游绑定已变化，需新建独立订阅分组以保留原周期记录")
-	}
-	_, err = conn.ExecContext(ctx, `INSERT INTO carpool_groups(group_id,account_id,enabled,initial_total_usd) VALUES($1,$2,$3,$4)
- ON CONFLICT(group_id) DO UPDATE SET enabled=excluded.enabled,initial_total_usd=excluded.initial_total_usd,
- state=CASE WHEN COALESCE((carpool_groups.state->>'estimated')::boolean,false) THEN carpool_groups.state
- ELSE jsonb_set(carpool_groups.state,'{capacity}',to_jsonb(excluded.initial_total_usd)) END,updated_at=now()`, id, g.AccountID, cfg.Enabled, cfg.InitialTotalUSD)
-	if err != nil {
-		return fmt.Errorf("保存失败；同一上游账号只能启用一个拼车额度池: %w", err)
-	}
-	s.policyMu.Lock()
-	s.managed.Store(id, true)
-	s.policyMu.Unlock()
-	return nil
 }
 
 func (s *Service) lock(ctx context.Context, id int64) (*sql.Conn, func(), error) {
@@ -400,7 +362,7 @@ func (s *Service) Sync(ctx context.Context, id int64) (retErr error) {
 		return err
 	}
 	st := g.State
-	if st.Capacity <= 0 {
+	if g.Config.automaticAllocation() && st.Capacity <= 0 {
 		st.Capacity = g.Config.InitialTotalUSD
 	}
 	resetChanged, ready := observeWindow(&st, percent, reset, now)
@@ -462,10 +424,10 @@ func (s *Service) apply(ctx context.Context, conn *sql.Conn, observed Group, st 
 	}
 	before := append([]Member(nil), g.Members...)
 	memberUsage := make([]float64, 0, len(g.Members))
-	changed := resetChanged
+	changed := resetChanged && g.Config.syncOfficialReset()
 	for i := range g.Members {
 		m := &g.Members[i]
-		if m.Window == nil || !m.Window.Equal(start) {
+		if g.Config.syncOfficialReset() && (m.Window == nil || !m.Window.Equal(start)) {
 			// Subtract only old charges proven by retained request logs. Pending
 			// billing and post-reset requests remain in the counter; missing logs
 			// cannot accidentally grant extra quota. No wallet/history is altered.
@@ -491,33 +453,20 @@ func (s *Service) apply(ctx context.Context, conn *sql.Conn, observed Group, st 
 		}
 		memberUsage = append(memberUsage, m.Usage)
 	}
-	// Normalize all traffic on this upstream to the carpool's billing scale.
-	// External traffic consumes the same official allowance and must be included.
-	var cost, multiplier float64
-	if err = tx.QueryRowContext(ctx, "SELECT rate_multiplier FROM groups WHERE id=$1", g.ID).Scan(&multiplier); err != nil {
-		return err
+	limit := g.WeeklyLimit
+	if g.Config.automaticAllocation() {
+		limit, err = estimateGroupLimit(ctx, tx, g, &st, memberUsage, start, now)
+		if err != nil {
+			return err
+		}
+	} else {
+		st.Estimated, st.Capacity, st.Baseline = false, 0, Observation{}
+		st.Message = "手动额度已生效，不随官方用量或人数自动调整"
 	}
-	if !finite(multiplier) || multiplier <= 0 {
-		return errors.New("免费或异常倍率分组无法测算美元额度")
-	}
-	if err = tx.QueryRowContext(ctx, "SELECT COALESCE(sum(total_cost),0) FROM usage_logs WHERE account_id=$1 AND created_at >= $2", g.AccountID, start).Scan(&cost); err != nil {
-		return err
-	}
-	estimate(&st, Observation{At: now, Percent: st.Percent, Cost: cost * multiplier})
-	// Before enough samples exist, departed subscribers' spending still counts
-	// against the seed pool. Rejoining users retain their existing counters.
-	var excludedUsage float64
-	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(sum(CASE WHEN s.weekly_window_start >= $2 THEN s.weekly_usage_usd ELSE
- (SELECT COALESCE(sum(l.actual_cost),0) FROM usage_logs l WHERE l.subscription_id=s.id AND l.created_at >= $2) END),0)
- FROM user_subscriptions s JOIN users u ON u.id=s.user_id WHERE s.group_id=$1 AND NOT
- (s.deleted_at IS NULL AND s.status='active' AND s.starts_at<=now() AND s.expires_at>now() AND u.deleted_at IS NULL AND u.status='active')`, g.ID, start).Scan(&excludedUsage); err != nil {
-		return err
-	}
-	limit := fairLimit(st, memberUsage, excludedUsage)
 	if !finite(limit) || limit <= 0 {
-		return errors.New("额度测算无效")
+		return errors.New("周额度无效，请设置大于零的每人周上限")
 	}
-	if absFloat(limit-g.WeeklyLimit) > 0.000000001 {
+	if g.Config.automaticAllocation() && absFloat(limit-g.WeeklyLimit) > 0.000000001 {
 		if _, err = tx.ExecContext(ctx, "UPDATE groups SET weekly_limit_usd=$2,updated_at=now() WHERE id=$1", g.ID, limit); err != nil {
 			return err
 		}
@@ -533,7 +482,7 @@ func (s *Service) apply(ctx context.Context, conn *sql.Conn, observed Group, st 
 	}
 	if changed {
 		kind := "adjust"
-		if resetChanged {
+		if resetChanged && g.Config.syncOfficialReset() {
 			kind = "official_reset"
 		}
 		detail, err := json.Marshal(map[string]any{"before_limit": g.WeeklyLimit, "after_limit": limit, "before_members": before, "after_members": g.Members, "state": st})
@@ -547,6 +496,36 @@ func (s *Service) apply(ctx context.Context, conn *sql.Conn, observed Group, st 
 	if err = tx.Commit(); err != nil {
 		return err
 	}
+	return s.invalidateGroup(ctx, g)
+}
+
+func estimateGroupLimit(ctx context.Context, q querier, g Group, st *State, memberUsage []float64, start, now time.Time) (float64, error) {
+	// Only site-routed traffic has dollar costs. Direct Codex/ChatGPT use can
+	// distort this estimate, which is why automatic allocation is optional.
+	var cost, multiplier float64
+	if err := q.QueryRowContext(ctx, "SELECT rate_multiplier FROM groups WHERE id=$1", g.ID).Scan(&multiplier); err != nil {
+		return 0, err
+	}
+	if !finite(multiplier) || multiplier <= 0 {
+		return 0, errors.New("免费或异常倍率分组无法测算美元额度")
+	}
+	if err := q.QueryRowContext(ctx, "SELECT COALESCE(sum(total_cost),0) FROM usage_logs WHERE account_id=$1 AND created_at >= $2", g.AccountID, start).Scan(&cost); err != nil {
+		return 0, err
+	}
+	estimate(st, Observation{At: now, Percent: st.Percent, Cost: cost * multiplier})
+	// Before enough samples exist, departed subscribers' spending still counts
+	// against the seed pool. Rejoining users retain their existing counters.
+	var excludedUsage float64
+	if err := q.QueryRowContext(ctx, `SELECT COALESCE(sum(CASE WHEN s.weekly_window_start >= $2 THEN s.weekly_usage_usd ELSE
+ (SELECT COALESCE(sum(l.actual_cost),0) FROM usage_logs l WHERE l.subscription_id=s.id AND l.created_at >= $2) END),0)
+ FROM user_subscriptions s JOIN users u ON u.id=s.user_id WHERE s.group_id=$1 AND NOT
+ (s.deleted_at IS NULL AND s.status='active' AND s.starts_at<=now() AND s.expires_at>now() AND u.deleted_at IS NULL AND u.status='active')`, g.ID, start).Scan(&excludedUsage); err != nil {
+		return 0, err
+	}
+	return fairLimit(*st, memberUsage, excludedUsage), nil
+}
+
+func (s *Service) invalidateGroup(ctx context.Context, g Group) error {
 	ids := make([]int64, 0, len(g.Members))
 	for _, m := range g.Members {
 		ids = append(ids, m.UserID)
