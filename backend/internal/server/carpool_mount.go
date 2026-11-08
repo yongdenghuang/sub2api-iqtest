@@ -26,6 +26,9 @@ func mountCarpool(v1 *gin.RouterGroup, h *handler.Handlers, jwtAuth middleware2.
 		return
 	}
 	h.Admin.Subscription.SetCarpoolWeeklyController(svc.ManagesWeeklyWindow)
+	if h.ChannelMonitor != nil {
+		h.ChannelMonitor.SetMemberVisibility(svc)
+	}
 	svc.RegisterRoutes(v1, gin.HandlerFunc(adminAuth), gin.HandlerFunc(auditLog))
 	svc.RegisterMemberRoutes(v1, gin.HandlerFunc(jwtAuth), middleware2.BackendModeUserGuard(settingService), panelRateLimiter.Global())
 }

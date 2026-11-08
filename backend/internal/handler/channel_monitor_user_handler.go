@@ -1,12 +1,16 @@
 package handler
 
 import (
+	"context"
+	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -14,8 +18,52 @@ import (
 
 // ChannelMonitorUserHandler 渠道监控用户只读 handler。
 type ChannelMonitorUserHandler struct {
-	monitorService *service.ChannelMonitorService
+	monitorService channelMonitorUserReader
 	settingService *service.SettingService
+	visibility     ChannelMonitorMemberVisibility
+}
+
+type channelMonitorUserReader interface {
+	ListUserView(context.Context) ([]*service.UserMonitorView, error)
+	GetUserDetail(context.Context, int64) (*service.UserMonitorDetail, error)
+}
+
+// ChannelMonitorMemberVisibility resolves access from current membership, not
+// display labels or caller-supplied group/user IDs.
+type ChannelMonitorMemberVisibility interface {
+	VisibleMonitorIDs(context.Context, int64) (map[int64]bool, error)
+}
+
+func (h *ChannelMonitorUserHandler) SetMemberVisibility(visibility ChannelMonitorMemberVisibility) {
+	h.visibility = visibility
+}
+
+// A nil scope is reserved for authenticated administrators. Missing services
+// and membership lookup failures must never fall back to global visibility.
+func (h *ChannelMonitorUserHandler) visibleMonitors(c *gin.Context) (map[int64]bool, bool) {
+	c.Header("Cache-Control", "private, no-store")
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Unauthorized(c, "user not found in context")
+		return nil, false
+	}
+	if role, exists := middleware.GetUserRoleFromContext(c); exists && role == service.RoleAdmin {
+		return nil, true
+	}
+	if h.visibility == nil {
+		response.Error(c, http.StatusServiceUnavailable, "monitor membership lookup unavailable")
+		return nil, false
+	}
+	allowed, err := h.visibility.VisibleMonitorIDs(c.Request.Context(), subject.UserID)
+	if err != nil {
+		slog.Error("channel_monitor: member visibility lookup failed", "error", err)
+		response.Error(c, http.StatusServiceUnavailable, "monitor membership lookup unavailable")
+		return nil, false
+	}
+	if allowed == nil {
+		allowed = map[int64]bool{}
+	}
+	return allowed, true
 }
 
 // NewChannelMonitorUserHandler 创建 handler。
@@ -158,7 +206,15 @@ func userMonitorDetailToResponse(d *service.UserMonitorDetail) *channelMonitorUs
 
 // List GET /api/v1/channel-monitors
 func (h *ChannelMonitorUserHandler) List(c *gin.Context) {
+	allowed, ok := h.visibleMonitors(c)
+	if !ok {
+		return
+	}
 	if !h.featureEnabled(c) {
+		response.Success(c, gin.H{"items": []channelMonitorUserListItem{}})
+		return
+	}
+	if allowed != nil && len(allowed) == 0 {
 		response.Success(c, gin.H{"items": []channelMonitorUserListItem{}})
 		return
 	}
@@ -170,6 +226,9 @@ func (h *ChannelMonitorUserHandler) List(c *gin.Context) {
 	includeQuota := h.quotaVisible(c)
 	items := make([]channelMonitorUserListItem, 0, len(views))
 	for _, v := range views {
+		if allowed != nil && !allowed[v.ID] {
+			continue
+		}
 		items = append(items, userMonitorViewToItem(v, includeQuota))
 	}
 	response.Success(c, gin.H{"items": items})
@@ -177,6 +236,10 @@ func (h *ChannelMonitorUserHandler) List(c *gin.Context) {
 
 // GetStatus GET /api/v1/channel-monitors/:id/status
 func (h *ChannelMonitorUserHandler) GetStatus(c *gin.Context) {
+	allowed, ok := h.visibleMonitors(c)
+	if !ok {
+		return
+	}
 	if !h.featureEnabled(c) {
 		response.ErrorFrom(c, service.ErrChannelMonitorNotFound)
 		return
@@ -184,6 +247,10 @@ func (h *ChannelMonitorUserHandler) GetStatus(c *gin.Context) {
 	// 复用 admin.ParseChannelMonitorID 保持错误码与日志一致。
 	id, ok := admin.ParseChannelMonitorID(c)
 	if !ok {
+		return
+	}
+	if allowed != nil && !allowed[id] {
+		response.ErrorFrom(c, service.ErrChannelMonitorNotFound)
 		return
 	}
 	detail, err := h.monitorService.GetUserDetail(c.Request.Context(), id)

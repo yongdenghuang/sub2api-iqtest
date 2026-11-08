@@ -97,6 +97,7 @@ func TestCarpoolPersistsScopedQuotasAndConfirmedResets(t *testing.T) {
 	require.False(t, g.State.Estimated)
 	require.NotZero(t, invalidator.subscriptions)
 	t.Run("member read access and privacy", func(t *testing.T) { testMemberViewAccess(t, s) })
+	t.Run("native monitor membership visibility", func(t *testing.T) { testMonitorVisibility(t, s) })
 
 	// A first sample starts now, so pre-existing logs cannot inflate capacity.
 	_, err = db.Exec(`INSERT INTO usage_logs(account_id,subscription_id,total_cost,actual_cost,created_at) VALUES(1,1,200,200,now())`)
