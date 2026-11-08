@@ -7,12 +7,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
@@ -93,6 +96,7 @@ func TestCarpoolPersistsScopedQuotasAndConfirmedResets(t *testing.T) {
 	}
 	require.False(t, g.State.Estimated)
 	require.NotZero(t, invalidator.subscriptions)
+	t.Run("member read access and privacy", func(t *testing.T) { testMemberViewAccess(t, s) })
 
 	// A first sample starts now, so pre-existing logs cannot inflate capacity.
 	_, err = db.Exec(`INSERT INTO usage_logs(account_id,subscription_id,total_cost,actual_cost,created_at) VALUES(1,1,200,200,now())`)
@@ -192,4 +196,90 @@ func TestCarpoolPersistsScopedQuotasAndConfirmedResets(t *testing.T) {
 	calls := q.calls
 	require.Error(t, s.Sync(ctx, 1))
 	require.Equal(t, calls, q.calls)
+}
+
+func testMemberViewAccess(t *testing.T, s *Service) {
+	t.Helper()
+	ctx := context.Background()
+	// Username imports can contain email addresses; never expose them as names.
+	_, err := s.db.Exec("UPDATE users SET username=email WHERE id=2")
+	require.NoError(t, err)
+	t.Cleanup(func() { _, _ = s.db.Exec("UPDATE users SET username='member2' WHERE id=2") })
+	groups, err := s.ListForMember(ctx, 1)
+	require.NoError(t, err)
+	require.Len(t, groups, 1, "unconfigured groups and wallet subscriptions are not carpools")
+	g := groups[0]
+	require.Equal(t, int64(1), g.ID)
+	require.Len(t, g.Members, 4)
+	require.Equal(t, 2400.0, g.TotalUSD)
+	require.Equal(t, 400.0, g.UsedUSD)
+	require.Equal(t, 2000.0, g.RemainingUSD)
+	require.True(t, g.Members[0].IsSelf)
+	require.False(t, g.Members[1].IsSelf)
+	require.Empty(t, g.Members[1].Name)
+	require.Equal(t, 600.0, g.Members[1].AllocatedUSD)
+	require.Equal(t, "sampling", g.Status)
+	outsider, err := s.ListForMember(ctx, 999)
+	require.NoError(t, err)
+	require.Empty(t, outsider)
+
+	// Every active-membership restriction must apply both to access and roster.
+	for _, tc := range []struct{ name, deny, restore string }{
+		{"expired", "UPDATE user_subscriptions SET expires_at=now()-interval '1 hour' WHERE id=1", "UPDATE user_subscriptions SET expires_at=now()+interval '30 days' WHERE id=1"},
+		{"future", "UPDATE user_subscriptions SET starts_at=now()+interval '1 hour' WHERE id=1", "UPDATE user_subscriptions SET starts_at=now()-interval '10 days' WHERE id=1"},
+		{"suspended subscription", "UPDATE user_subscriptions SET status='suspended' WHERE id=1", "UPDATE user_subscriptions SET status='active' WHERE id=1"},
+		{"deleted subscription", "UPDATE user_subscriptions SET deleted_at=now() WHERE id=1", "UPDATE user_subscriptions SET deleted_at=NULL WHERE id=1"},
+		{"disabled user", "UPDATE users SET status='disabled' WHERE id=1", "UPDATE users SET status='active' WHERE id=1"},
+		{"deleted user", "UPDATE users SET deleted_at=now() WHERE id=1", "UPDATE users SET deleted_at=NULL WHERE id=1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := s.db.Exec(tc.deny)
+			require.NoError(t, err)
+			t.Cleanup(func() { _, _ = s.db.Exec(tc.restore) })
+			mine, err := s.ListForMember(ctx, 1)
+			require.NoError(t, err)
+			require.Empty(t, mine)
+			other, err := s.ListForMember(ctx, 3)
+			require.NoError(t, err)
+			require.Len(t, other, 1)
+			require.Len(t, other[0].Members, 3)
+			require.Equal(t, "adjusting", other[0].Status)
+		})
+	}
+	for _, tc := range []struct{ deny, restore string }{
+		{"UPDATE carpool_groups SET enabled=false WHERE group_id=1", "UPDATE carpool_groups SET enabled=true WHERE group_id=1"},
+		{"UPDATE groups SET status='inactive' WHERE id=1", "UPDATE groups SET status='active' WHERE id=1"},
+		{"UPDATE groups SET deleted_at=now() WHERE id=1", "UPDATE groups SET deleted_at=NULL WHERE id=1"},
+	} {
+		_, err = s.db.Exec(tc.deny)
+		require.NoError(t, err)
+		mine, readErr := s.ListForMember(ctx, 1)
+		_, err = s.db.Exec(tc.restore)
+		require.NoError(t, err)
+		require.NoError(t, readErr)
+		require.Empty(t, mine)
+	}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	s.RegisterMemberRoutes(r.Group("/api/v1"), func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1})
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/carpool?user_id=999&group_id=3", nil))
+	require.Equal(t, 200, w.Code)
+	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+	var body struct {
+		Data []MemberGroupView `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Len(t, body.Data, 1)
+	require.Equal(t, int64(1), body.Data[0].ID, "request parameters cannot override the authenticated viewer")
+	for _, private := range []string{"@example.com", "Source", "credentials", "account_id", "user_id", "balance", "last_error", "baseline"} {
+		require.NotContains(t, w.Body.String(), private)
+	}
+	require.Equal(t, 1, s.quota.(*testQuota).calls, "page loads must not call upstream")
+	var sum float64
+	require.NoError(t, s.db.QueryRow("SELECT sum(weekly_usage_usd) FROM user_subscriptions WHERE group_id=1").Scan(&sum))
+	require.Equal(t, 400.0, sum, "reading must preserve usage counters")
 }

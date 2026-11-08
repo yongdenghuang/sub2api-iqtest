@@ -20,8 +20,19 @@
 
 ## 运维与验证
 
-独立 `carpool_groups` / `carpool_events` 表保存配置、采样状态和调整记录。进程间分组互斥，数据库事务锁定订阅计数后更新；提交后失效 API Key 中的分组缓存和订阅缓存。每次成功轮询重试缓存失效。只有管理员可访问接口，接入现有审计中间件。
+独立 `carpool_groups` / `carpool_events` 表保存配置、采样状态和调整记录。进程间分组互斥，数据库事务锁定订阅计数后更新；提交后失效 API Key 中的分组缓存和订阅缓存。每次成功轮询重试缓存失效。配置、同步和事件接口仅管理员可访问，接入现有审计中间件。
 
 `TOKEN_REFRESH_ENABLED=false` 的部署验证进程不启动后台轮询。主进程默认仍需管理员启用一个池后才进行查询/额度调整。单机每分钟刷新启用列表，多实例配置传播最多延迟一分钟。
 
-测试：`go test -tags=unit ./internal/carpool ./internal/service -run 'Carpool|ResetRequires|OnlyFreshWeekly|PercentageDrop|NaturalResetAnd|CapacityUses|EqualCaps'`；真实 PostgreSQL 集成测试 `go test -tags=integration ./internal/carpool`；前端 `pnpm exec vitest run src/views/admin/__tests__/CarpoolView.spec.ts`。
+## 车友展示
+
+登录后的仪表盘、我的订阅和“我的拼车”(`/carpool`) 显示同一份车友视图。前端每 30 秒读取本地最新快照，后台保持每分钟查询官方；隐藏标签页暂停请求。刷新页面不会消费重置卡或触发额外上游调用。
+
+只读 `GET /api/v1/carpool` 使用现有 JWT、后台模式访问限制和面板限流。服务器从登录身份确定用户，仅返回该用户当前生效、启用均分的拼车订阅。订阅/用户到期、停用、删除、尚未开始，或池停用后，不再返回本车。成员名单和访问判断使用同一只读可重复读事务。响应禁止缓存，仅包含昵称或匿名车友编号，不包含邮箱、上游账号、凭据、其他车的数据、钱包或原始错误。
+
+- 本车本周总额度 = 当前已生效周上限 × 生效人数；已用 = 本车有效成员周用量之和。
+- 本车剩余 = 所有 `max(分配 - 已用, 0)` 之和。已超额成员不会扣掉他人的可用份额，因此有超额成员时，“总额度 - 已用”可能不同于剩余。
+- 单独展示官方 7 天已用比例、估算整周上游容量、最后同步时间和下次官方重置。上游美元估算不等于本站已分配额度，也不是官方美元余额或实际订阅付款。
+- 首次查询前显示未知值。同步失败、超过 3 分钟未更新、重置未确认或人数待调整时显示明确状态；倒计时到零不会自行清零已用额度。
+
+测试：`go test -tags=unit ./internal/carpool`；真实 PostgreSQL 集成测试 `go test -tags=integration ./internal/carpool`；前端 `pnpm exec vitest run src/views/admin/__tests__/CarpoolView.spec.ts src/components/user/carpool/__tests__`。集成测试覆盖成员访问范围、到期/停用撤权、参数越权、字段隐私和读取不改变账单计数。

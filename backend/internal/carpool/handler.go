@@ -6,8 +6,27 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/gin-gonic/gin"
 )
+
+func (s *Service) RegisterMemberRoutes(v1 *gin.RouterGroup, mw ...gin.HandlerFunc) {
+	g := v1.Group("/carpool", mw...)
+	g.GET("", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		subject, ok := middleware.GetAuthSubjectFromContext(c)
+		if !ok || subject.UserID <= 0 {
+			response.Unauthorized(c, "Authentication required")
+			return
+		}
+		rows, err := s.ListForMember(c.Request.Context(), subject.UserID)
+		if err != nil {
+			response.InternalError(c, "Unable to load shared quota")
+			return
+		}
+		response.Success(c, rows)
+	})
+}
 
 func (s *Service) RegisterRoutes(v1 *gin.RouterGroup, mw ...gin.HandlerFunc) {
 	g := v1.Group("/admin/carpool", mw...)

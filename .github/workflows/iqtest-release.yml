@@ -64,7 +64,7 @@ jobs:
         run: python3 -m unittest discover -s deploy/iqtest -p 'test_*.py'
       - name: Shared subscription quota controls
         working-directory: frontend
-        run: pnpm exec vitest run src/views/admin/__tests__/CarpoolView.spec.ts
+        run: pnpm exec vitest run src/views/admin/__tests__/CarpoolView.spec.ts src/components/user/carpool/__tests__
       - name: Build embedded frontend
         run: pnpm --dir frontend run build
       - uses: actions/upload-artifact@v7

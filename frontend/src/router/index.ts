@@ -289,6 +289,19 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/carpool',
+    name: 'MyCarpool',
+    component: () => import('@/views/user/CarpoolView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'My Carpool',
+      titleKey: 'userCarpool.title',
+      descriptionKey: 'userCarpool.description',
+      requiresSubscription: true
+    }
+  },
+  {
     path: '/subscriptions',
     name: 'Subscriptions',
     component: () => import('@/views/user/SubscriptionsView.vue'),
@@ -976,6 +989,7 @@ router.beforeEach(async (to, _from, next) => {
       '/admin/subscriptions',
       '/admin/redeem',
       '/subscriptions',
+      '/carpool',
       '/redeem'
     ]
 
