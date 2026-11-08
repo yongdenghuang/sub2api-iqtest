@@ -62,6 +62,9 @@ jobs:
         run: pnpm exec vitest run src/views/admin/iqtest/__tests__ src/views/admin/__tests__/AccountsView.iqStatus.spec.ts src/components/common/__tests__/DataTable.spec.ts src/components/account/__tests__/AccountTestModal.spec.ts src/components/account/__tests__/AccountStatusIndicator.spec.ts src/components/admin/account/__tests__/ScheduledTestsPanel.results.spec.ts src/components/admin/account/__tests__/ReAuthAccountModal.openai.spec.ts src/components/admin/account/__tests__/ReAuthAccountModal.grok.spec.ts src/composables/__tests__/useOpenAIOAuth.spec.ts
       - name: Deployment failure / rollback regression tests
         run: python3 -m unittest discover -s deploy/iqtest -p 'test_*.py'
+      - name: Shared subscription quota controls
+        working-directory: frontend
+        run: pnpm exec vitest run src/views/admin/__tests__/CarpoolView.spec.ts
       - name: Build embedded frontend
         run: pnpm --dir frontend run build
       - uses: actions/upload-artifact@v7

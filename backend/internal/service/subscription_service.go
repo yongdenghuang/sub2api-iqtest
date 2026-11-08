@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -57,6 +58,7 @@ type SubscriptionService struct {
 
 	maintenanceQueue *SubscriptionMaintenanceQueue
 	now              func() time.Time
+	carpoolPolicy    atomic.Pointer[carpoolWindowPolicy]
 }
 
 // NewSubscriptionService 创建订阅服务
@@ -785,7 +787,7 @@ func (s *SubscriptionService) ListUserSubscriptions(ctx context.Context, userID 
 	if err != nil {
 		return nil, err
 	}
-	normalizeExpiredWindows(subs)
+	normalizeExpiredWindows(subs, s.carpoolManagesWeekly)
 	normalizeSubscriptionStatus(subs)
 	return subs, nil
 }
@@ -796,7 +798,7 @@ func (s *SubscriptionService) ListActiveUserSubscriptions(ctx context.Context, u
 	if err != nil {
 		return nil, err
 	}
-	normalizeExpiredWindows(subs)
+	normalizeExpiredWindows(subs, s.carpoolManagesWeekly)
 	return subs, nil
 }
 
@@ -807,7 +809,7 @@ func (s *SubscriptionService) ListGroupSubscriptions(ctx context.Context, groupI
 	if err != nil {
 		return nil, nil, err
 	}
-	normalizeExpiredWindows(subs)
+	normalizeExpiredWindows(subs, s.carpoolManagesWeekly)
 	normalizeSubscriptionStatus(subs)
 	return subs, pag, nil
 }
@@ -819,18 +821,18 @@ func (s *SubscriptionService) List(ctx context.Context, page, pageSize int, user
 	if err != nil {
 		return nil, nil, err
 	}
-	normalizeExpiredWindows(subs)
+	normalizeExpiredWindows(subs, s.carpoolManagesWeekly)
 	normalizeSubscriptionStatus(subs)
 	return subs, pag, nil
 }
 
 // normalizeExpiredWindows 将已过期窗口的数据清零（仅影响返回数据，不影响数据库）
 // 这确保前端显示正确的当前窗口状态，而不是过期窗口的历史数据
-func normalizeExpiredWindows(subs []UserSubscription) {
-	normalizeExpiredWindowsAt(subs, time.Now())
+func normalizeExpiredWindows(subs []UserSubscription, manages ...func(int64) bool) {
+	normalizeExpiredWindowsAt(subs, time.Now(), manages...)
 }
 
-func normalizeExpiredWindowsAt(subs []UserSubscription, now time.Time) {
+func normalizeExpiredWindowsAt(subs []UserSubscription, now time.Time, manages ...func(int64) bool) {
 	for i := range subs {
 		sub := &subs[i]
 		// 日窗口过期：清零展示数据
@@ -839,7 +841,8 @@ func normalizeExpiredWindowsAt(subs []UserSubscription, now time.Time) {
 			sub.DailyUsageUSD = 0
 		}
 		// 周窗口过期：清零展示数据
-		if sub.canAutomaticallyResetWeeklyAt(now) {
+		managed := len(manages) > 0 && manages[0](sub.GroupID)
+		if !managed && sub.canAutomaticallyResetWeeklyAt(now) {
 			sub.WeeklyWindowStart = nil
 			sub.WeeklyUsageUSD = 0
 		}
@@ -926,7 +929,7 @@ func (s *SubscriptionService) CheckAndResetWindows(ctx context.Context, sub *Use
 	}
 
 	// 周窗口重置（7天）
-	if windowStart, ok := sub.automaticWindowStartAt(sub.WeeklyWindowStart, 7*24*time.Hour, now); ok {
+	if windowStart, ok := sub.automaticWindowStartAt(sub.WeeklyWindowStart, 7*24*time.Hour, now); ok && !s.carpoolManagesWeekly(sub.GroupID) {
 		expectedWindowStart := sub.WeeklyWindowStart
 		if err := s.userSubRepo.ResetWeeklyUsage(ctx, sub.ID, expectedWindowStart, windowStart); err != nil {
 			return err
@@ -1021,7 +1024,7 @@ func (s *SubscriptionService) ValidateAndCheckLimits(sub *UserSubscription, grou
 		sub.DailyUsageUSD = 0
 		needsMaintenance = true
 	}
-	if sub.canAutomaticallyResetWeeklyAt(now) {
+	if !s.carpoolManagesWeekly(sub.GroupID) && sub.canAutomaticallyResetWeeklyAt(now) {
 		sub.WeeklyUsageUSD = 0
 		needsMaintenance = true
 	}

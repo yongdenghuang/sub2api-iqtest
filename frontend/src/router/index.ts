@@ -526,6 +526,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/carpool',
+    name: 'AdminCarpool',
+    component: () => import('@/views/admin/CarpoolView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Shared quota',
+      titleKey: 'carpool.title',
+      descriptionKey: 'carpool.description'
+    }
+  },
+  {
     path: '/admin/iqtest',
     name: 'AdminIQTest',
     component: () => import('@/views/admin/iqtest/IQTestView.vue'),
