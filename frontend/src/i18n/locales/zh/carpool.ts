@@ -8,7 +8,7 @@ export default {
     myAllocation: '我的分配', myUsed: '我的已用', myRemaining: '还可用 {amount}', commonCap: '与其他车友同一周上限',
     officialWeekly: '官方 7 天用量', usedPercent: '已用 {percent}%', nextReset: '下次官方重置',
     capacity: '上游整周额度估算 {amount}，为用量推算值，并非官方美元余额。',
-    samplingHint: '美元额度采样中，当前使用管理员设置的初始额度。',
+    samplingHint: '美元额度采样中，暂按当前已生效额度使用，样本足够后自动调整。',
     roster: '本车车友额度明细', member: '车友', allocated: '分配', used: '已用', available: '剩余', me: '我', seat: '车友 {number}',
     allocationHint: '额度按本车生效人数动态调整，已用金额保留；超过调整后的上限时，剩余按 0 计。这里显示用量额度，不是钱包余额，也不代表已经花费的订阅费。',
     lastSync: '最近官方同步', cadence: '官方约每分钟查询 · 页面每 30 秒刷新 · 时间按当前设备时区显示',

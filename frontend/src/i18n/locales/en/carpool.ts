@@ -8,7 +8,7 @@ export default {
     myAllocation: 'My allocation', myUsed: 'My usage', myRemaining: '{amount} available', commonCap: 'Same weekly cap for every member',
     officialWeekly: 'Upstream 7-day usage', usedPercent: '{percent}% used', nextReset: 'Next upstream reset',
     capacity: 'Estimated full-week upstream capacity: {amount}. Calculated from consumption; not an official dollar balance.',
-    samplingHint: 'Collecting dollar-capacity samples. Using the initial budget set by the administrator.',
+    samplingHint: 'Collecting dollar-capacity samples. Currently applied allowances remain available and will adjust when enough samples exist.',
     roster: 'Member quota breakdown', member: 'Member', allocated: 'Allocated', used: 'Used', available: 'Remaining', me: 'Me', seat: 'Member {number}',
     allocationHint: 'Allowances adjust with active membership and retain past usage. Members above a reduced cap have zero remaining. These are usage allowances, not wallet balances or subscription fees already spent.',
     lastSync: 'Last upstream sync', cadence: 'Upstream checked about every minute · Page refreshes every 30 seconds · Times use your device timezone',
