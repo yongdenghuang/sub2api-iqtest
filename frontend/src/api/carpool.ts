@@ -9,6 +9,19 @@ export interface CarpoolMember {
   remaining_usd: number
 }
 
+export interface CarpoolUsageWindow {
+  window: '5h' | '7d'
+  official_used_percent: number | null
+  start_at: string | null
+  reset_at: string | null
+  stats: {
+    requests: number
+    tokens: number
+    account_cost_usd: number
+    user_cost_usd: number
+  } | null
+}
+
 export interface MyCarpool {
   id: number
   name: string
@@ -27,6 +40,7 @@ export interface MyCarpool {
   last_sync_at: string | null
   status: 'waiting' | 'sampling' | 'synced' | 'delayed' | 'pending_reset' | 'adjusting'
   members: CarpoolMember[]
+  windows: CarpoolUsageWindow[]
 }
 
 export async function getMyCarpools(signal?: AbortSignal): Promise<MyCarpool[]> {

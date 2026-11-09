@@ -28,7 +28,7 @@ func TestMemberSummaryRetainsOverspentAndStaleQuota(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			state := st
 			tc.change(&state)
-			g := MemberGroupView{PerMemberUSD: 100, SyncOfficialReset: true, Members: []MemberView{{UsedUSD: 150, RemainingUSD: 0}, {UsedUSD: 20, RemainingUSD: 80}}}
+			g := MemberGroupView{PerMemberUSD: 100, SyncOfficialReset: true, Members: []MemberView{{Name: "private-other-member", UsedUSD: 150, RemainingUSD: 0}, {Name: "me", IsSelf: true, UsedUSD: 20, RemainingUSD: 80}}}
 			completeMemberView(&g, state, now)
 			require.Equal(t, 200.0, g.TotalUSD)
 			require.Equal(t, 170.0, g.UsedUSD)
@@ -37,6 +37,9 @@ func TestMemberSummaryRetainsOverspentAndStaleQuota(t *testing.T) {
 			data, err := json.Marshal(g)
 			require.NoError(t, err)
 			require.NotContains(t, string(data), "private upstream error")
+			require.NotContains(t, string(data), "private-other-member")
+			require.Len(t, g.Members, 1)
+			require.True(t, g.Members[0].IsSelf)
 		})
 	}
 	g := MemberGroupView{}

@@ -21,10 +21,11 @@ import (
 )
 
 type testQuota struct {
-	percent float64
-	reset   time.Time
-	err     error
-	calls   int
+	fiveHour *service.OpenAIRateLimitWindow
+	percent  float64
+	reset    time.Time
+	err      error
+	calls    int
 }
 
 func (q *testQuota) QueryUsage(context.Context, int64) (*service.OpenAIQuotaUsage, error) {
@@ -32,7 +33,7 @@ func (q *testQuota) QueryUsage(context.Context, int64) (*service.OpenAIQuotaUsag
 	if q.err != nil {
 		return nil, q.err
 	}
-	return &service.OpenAIQuotaUsage{RateLimit: &service.OpenAIRateLimit{SecondaryWindow: &service.OpenAIRateLimitWindow{UsedPercent: q.percent, ResetAt: q.reset.Unix(), LimitWindowSeconds: 604800}}}, nil
+	return &service.OpenAIQuotaUsage{RateLimit: &service.OpenAIRateLimit{PrimaryWindow: q.fiveHour, SecondaryWindow: &service.OpenAIRateLimitWindow{UsedPercent: q.percent, ResetAt: q.reset.Unix(), LimitWindowSeconds: 604800}}}, nil
 }
 
 type testInvalidator struct{ groups, subscriptions int }
@@ -64,7 +65,9 @@ func TestCarpoolPersistsScopedQuotasAndConfirmedResets(t *testing.T) {
  CREATE TABLE account_groups(account_id BIGINT,group_id BIGINT);
  CREATE TABLE users(id BIGINT PRIMARY KEY,username TEXT,email TEXT,status TEXT DEFAULT 'active',deleted_at TIMESTAMPTZ,balance NUMERIC DEFAULT 10000);
  CREATE TABLE user_subscriptions(id BIGINT PRIMARY KEY,user_id BIGINT,group_id BIGINT,status TEXT DEFAULT 'active',starts_at TIMESTAMPTZ DEFAULT now()-interval '10 days',expires_at TIMESTAMPTZ DEFAULT now()+interval '30 days',deleted_at TIMESTAMPTZ,weekly_window_start TIMESTAMPTZ DEFAULT now()-interval '1 day',weekly_usage_usd NUMERIC(20,8) DEFAULT 100,daily_window_start TIMESTAMPTZ DEFAULT now(),monthly_window_start TIMESTAMPTZ DEFAULT now(),daily_usage_usd NUMERIC DEFAULT 10,monthly_usage_usd NUMERIC DEFAULT 1000,updated_at TIMESTAMPTZ);
- CREATE TABLE usage_logs(id BIGSERIAL PRIMARY KEY,account_id BIGINT,subscription_id BIGINT,actual_cost NUMERIC,total_cost NUMERIC,created_at TIMESTAMPTZ);
+ CREATE TABLE usage_logs(id BIGSERIAL PRIMARY KEY,account_id BIGINT,subscription_id BIGINT,user_id BIGINT,group_id BIGINT,
+ input_tokens INT DEFAULT 0,output_tokens INT DEFAULT 0,cache_creation_tokens INT DEFAULT 0,cache_read_tokens INT DEFAULT 0,
+ account_stats_cost NUMERIC,account_rate_multiplier NUMERIC,actual_cost NUMERIC,total_cost NUMERIC,created_at TIMESTAMPTZ);
  INSERT INTO groups(id,name) VALUES(1,'Shared'),(2,'Other'),(3,'Duplicate source');
  UPDATE groups SET subscription_type='standard',weekly_limit_usd=50 WHERE id=2;
  INSERT INTO accounts(id,name) VALUES(1,'Source'),(2,'Other');
@@ -74,7 +77,7 @@ func TestCarpoolPersistsScopedQuotasAndConfirmedResets(t *testing.T) {
  INSERT INTO user_subscriptions(id,user_id,group_id) VALUES(10,1,2),(11,1,3);`)
 	require.NoError(t, err)
 	now := time.Now().UTC().Truncate(time.Second)
-	q := &testQuota{percent: 25, reset: now.Add(6 * 24 * time.Hour)}
+	q := &testQuota{percent: 25, reset: now.Add(6 * 24 * time.Hour), fiveHour: &service.OpenAIRateLimitWindow{UsedPercent: 12, LimitWindowSeconds: 18000, ResetAt: now.Add(time.Hour).Unix()}}
 	invalidator := &testInvalidator{}
 	s := &Service{db: db, quota: q, groups: invalidator, subscriptions: invalidator}
 	require.NoError(t, s.migrate(ctx))
@@ -95,8 +98,11 @@ func TestCarpoolPersistsScopedQuotasAndConfirmedResets(t *testing.T) {
 		require.Equal(t, 100.0, m.Usage)
 	}
 	require.False(t, g.State.Estimated)
+	require.Len(t, g.State.Windows, 2)
+	require.Equal(t, 12.0, g.State.Windows[0].UsedPercent)
 	require.NotZero(t, invalidator.subscriptions)
 	t.Run("member read access and privacy", func(t *testing.T) { testMemberViewAccess(t, s) })
+	t.Run("personal official-window usage", func(t *testing.T) { testPersonalWindowUsage(t, s) })
 	t.Run("native monitor membership visibility", func(t *testing.T) { testMonitorVisibility(t, s) })
 	t.Run("manual allowances and independent resets", func(t *testing.T) { testManualQuotaAndIndependentReset(t, db) })
 
@@ -212,14 +218,14 @@ func testMemberViewAccess(t *testing.T, s *Service) {
 	require.Len(t, groups, 1, "unconfigured groups and wallet subscriptions are not carpools")
 	g := groups[0]
 	require.Equal(t, int64(1), g.ID)
-	require.Len(t, g.Members, 4)
+	require.Len(t, g.Members, 1)
+	require.Equal(t, 4, g.MemberCount)
 	require.Equal(t, 2400.0, g.TotalUSD)
 	require.Equal(t, 400.0, g.UsedUSD)
 	require.Equal(t, 2000.0, g.RemainingUSD)
 	require.True(t, g.Members[0].IsSelf)
-	require.False(t, g.Members[1].IsSelf)
-	require.Empty(t, g.Members[1].Name)
-	require.Equal(t, 600.0, g.Members[1].AllocatedUSD)
+	require.Equal(t, "member1", g.Members[0].Name)
+	require.Equal(t, 600.0, g.Members[0].AllocatedUSD)
 	require.Equal(t, "sampling", g.Status)
 	outsider, err := s.ListForMember(ctx, 999)
 	require.NoError(t, err)
@@ -244,7 +250,9 @@ func testMemberViewAccess(t *testing.T, s *Service) {
 			other, err := s.ListForMember(ctx, 3)
 			require.NoError(t, err)
 			require.Len(t, other, 1)
-			require.Len(t, other[0].Members, 3)
+			require.Len(t, other[0].Members, 1)
+			require.Equal(t, "member3", other[0].Members[0].Name)
+			require.Equal(t, 3, other[0].MemberCount)
 			require.Equal(t, "adjusting", other[0].Status)
 		})
 	}
@@ -276,8 +284,10 @@ func testMemberViewAccess(t *testing.T, s *Service) {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.Len(t, body.Data, 1)
+	require.Len(t, body.Data[0].Members, 1)
+	require.True(t, body.Data[0].Members[0].IsSelf)
 	require.Equal(t, int64(1), body.Data[0].ID, "request parameters cannot override the authenticated viewer")
-	for _, private := range []string{"@example.com", "Source", "credentials", "account_id", "user_id", "balance", "last_error", "baseline"} {
+	for _, private := range []string{"member2", "member3", "member4", "@example.com", "Source", "credentials", "account_id", "user_id", "balance", "last_error", "baseline"} {
 		require.NotContains(t, w.Body.String(), private)
 	}
 	require.Equal(t, 1, s.quota.(*testQuota).calls, "page loads must not call upstream")

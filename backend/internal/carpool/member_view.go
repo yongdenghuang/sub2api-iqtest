@@ -21,23 +21,24 @@ type MemberView struct {
 }
 
 type MemberGroupView struct {
-	ID                  int64        `json:"id"`
-	Name                string       `json:"name"`
-	MemberCount         int          `json:"member_count"`
-	AllocationReady     bool         `json:"allocation_ready"`
-	AllocationMode      string       `json:"allocation_mode"`
-	SyncOfficialReset   bool         `json:"sync_official_reset"`
-	TotalUSD            float64      `json:"total_usd"`
-	UsedUSD             float64      `json:"used_usd"`
-	RemainingUSD        float64      `json:"remaining_usd"`
-	PerMemberUSD        float64      `json:"per_member_usd"`
-	Estimated           bool         `json:"estimated"`
-	UpstreamCapacityUSD *float64     `json:"upstream_capacity_usd"`
-	OfficialUsedPercent *float64     `json:"official_used_percent"`
-	NextResetAt         *time.Time   `json:"next_reset_at"`
-	LastSyncAt          *time.Time   `json:"last_sync_at"`
-	Status              string       `json:"status"`
-	Members             []MemberView `json:"members"`
+	ID                  int64               `json:"id"`
+	Name                string              `json:"name"`
+	MemberCount         int                 `json:"member_count"`
+	AllocationReady     bool                `json:"allocation_ready"`
+	AllocationMode      string              `json:"allocation_mode"`
+	SyncOfficialReset   bool                `json:"sync_official_reset"`
+	TotalUSD            float64             `json:"total_usd"`
+	UsedUSD             float64             `json:"used_usd"`
+	RemainingUSD        float64             `json:"remaining_usd"`
+	PerMemberUSD        float64             `json:"per_member_usd"`
+	Estimated           bool                `json:"estimated"`
+	UpstreamCapacityUSD *float64            `json:"upstream_capacity_usd"`
+	OfficialUsedPercent *float64            `json:"official_used_percent"`
+	NextResetAt         *time.Time          `json:"next_reset_at"`
+	LastSyncAt          *time.Time          `json:"last_sync_at"`
+	Status              string              `json:"status"`
+	Members             []MemberView        `json:"members"`
+	Windows             []MemberUsageWindow `json:"windows"`
 }
 
 // ListForMember is a read-only snapshot. Authorization and the member roster
@@ -86,13 +87,18 @@ func (s *Service) ListForMember(ctx context.Context, userID int64) ([]MemberGrou
 	if rowErr != nil {
 		return nil, rowErr
 	}
+	now := time.Now().UTC()
 	for i := range result {
 		g := &result[i]
 		g.Members, err = readMemberRoster(ctx, tx, g.ID, userID, g.PerMemberUSD)
 		if err != nil {
 			return nil, err
 		}
-		completeMemberView(g, states[i], time.Now())
+		completeMemberView(g, states[i], now)
+		g.Windows, err = readMemberWindows(ctx, tx, g.ID, userID, states[i], now)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
@@ -140,6 +146,15 @@ func completeMemberView(g *MemberGroupView, st State, now time.Time) {
 		// must not remove another member's remaining allowance from the display.
 		g.RemainingUSD += m.RemainingUSD
 	}
+	// Aggregate totals remain shared, but another member's identity and usage
+	// must never leave the server. Keep the array for older clients as well.
+	mine := []MemberView{}
+	for _, m := range g.Members {
+		if m.IsSelf {
+			mine = append(mine, m)
+		}
+	}
+	g.Members = mine
 	automatic := g.AllocationMode != AllocationManual
 	g.Estimated = automatic && st.Estimated
 	if g.Estimated && finite(st.Capacity) && st.Capacity > 0 {

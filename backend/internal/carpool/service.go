@@ -362,6 +362,7 @@ func (s *Service) Sync(ctx context.Context, id int64) (retErr error) {
 		return err
 	}
 	st := g.State
+	st.Windows = officialWindows(usage, now)
 	if g.Config.automaticAllocation() && st.Capacity <= 0 {
 		st.Capacity = g.Config.InitialTotalUSD
 	}
