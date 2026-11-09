@@ -24,6 +24,7 @@ type MemberWindowStats struct {
 
 type MemberUsageWindow struct {
 	Window              string             `json:"window"`
+	RangeSource         string             `json:"range_source"`
 	OfficialUsedPercent *float64           `json:"official_used_percent"`
 	StartAt             *time.Time         `json:"start_at"`
 	ResetAt             *time.Time         `json:"reset_at"`
@@ -55,8 +56,16 @@ func officialWindows(usage *service.OpenAIQuotaUsage, now time.Time) []OfficialW
 				continue
 			}
 			reset := time.Unix(w.ResetAt, 0).UTC()
-			if w.ResetAt <= 0 || reset.After(now.Add(duration+5*time.Minute)) || reset.Before(now.Add(-duration)) {
+			if w.ResetAt <= 0 && w.ResetAfterSeconds > 0 && w.ResetAfterSeconds <= int64((duration+5*time.Minute)/time.Second) {
+				reset = now.Add(time.Duration(w.ResetAfterSeconds) * time.Second)
+			}
+			if reset.After(now.Add(duration + 5*time.Minute)) {
 				continue
+			}
+			// A valid percentage may have no active reset timestamp. Preserve
+			// the reading without inventing an official time interval.
+			if reset.Before(now.Add(-duration)) {
+				reset = time.Time{}
 			}
 			windows = append(windows, OfficialWindow{Window: name, UsedPercent: w.UsedPercent, ResetAt: reset})
 			break
@@ -74,26 +83,31 @@ func readMemberWindows(ctx context.Context, q querier, groupID, userID int64, st
 	}
 	windows := make([]MemberUsageWindow, 0, 2)
 	for _, name := range []string{"5h", "7d"} {
-		w := MemberUsageWindow{Window: name}
+		w := MemberUsageWindow{Window: name, RangeSource: "recent"}
+		start := now.Add(-windowDuration(name))
 		for _, snapshot := range snapshots {
-			if snapshot.Window != name || snapshot.ResetAt.IsZero() || !finite(snapshot.UsedPercent) || snapshot.UsedPercent < 0 || snapshot.UsedPercent > 100 {
+			if snapshot.Window != name || !finite(snapshot.UsedPercent) || snapshot.UsedPercent < 0 || snapshot.UsedPercent > 100 {
 				continue
 			}
-			start, reset := snapshot.ResetAt.Add(-windowDuration(name)), snapshot.ResetAt
-			if start.After(now) {
-				continue
-			}
-			w.StartAt, w.ResetAt, w.OfficialUsedPercent = &start, &reset, &snapshot.UsedPercent
-			end := now
-			if reset.Before(end) {
-				end = reset
-			}
-			var err error
-			w.Stats, err = readMemberWindowStats(ctx, q, groupID, userID, start, end)
-			if err != nil {
-				return nil, err
+			w.OfficialUsedPercent = &snapshot.UsedPercent
+			if !snapshot.ResetAt.IsZero() {
+				reset := snapshot.ResetAt
+				w.ResetAt = &reset
+				if reset.After(now) && !reset.Add(-windowDuration(name)).After(now) {
+					start = reset.Add(-windowDuration(name))
+					w.RangeSource = "official"
+				}
 			}
 			break
+		}
+		// Like native Codex window stats, use a recent 5h/7d interval when
+		// upstream has no active window. Label that interval explicitly and
+		// keep official percentage/reset unknown unless actually observed.
+		w.StartAt = &start
+		var err error
+		w.Stats, err = readMemberWindowStats(ctx, q, groupID, userID, start, now)
+		if err != nil {
+			return nil, err
 		}
 		windows = append(windows, w)
 	}

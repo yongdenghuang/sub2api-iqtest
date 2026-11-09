@@ -62,7 +62,7 @@
             <div v-for="w in windows(g)" :key="w.window" class="rounded-xl border border-gray-200 p-4 dark:border-dark-700" :data-window="w.window">
               <div class="mb-4 flex items-center justify-between gap-2">
                 <span class="rounded-lg px-2 py-1 text-sm font-semibold" :class="w.window === '5h' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'">{{ t(`userCarpool.windows.${w.window}`) }}</span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t(windowEnded(w) ? 'userCarpool.windowEnded' : 'userCarpool.currentWindow') }}</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ w.range_source === 'recent' ? t('userCarpool.recentWindow', { window: t(`userCarpool.windows.${w.window}`) }) : t(windowEnded(w) ? 'userCarpool.windowEnded' : 'userCarpool.currentWindow') }}</span>
               </div>
               <dl class="grid grid-cols-2 gap-x-4 gap-y-4">
                 <div>
@@ -92,7 +92,7 @@
                   <div class="h-full rounded-full transition-all" :class="(w.official_used_percent ?? 0) >= 90 ? 'bg-amber-500' : 'bg-primary-500'" :style="{ width: `${w.official_used_percent ?? 0}%` }"></div>
                 </div>
                 <div class="mt-3 space-y-1 text-xs">
-                  <p class="font-medium text-primary-700 dark:text-primary-300">{{ windowEnded(w) ? t('userCarpool.windowAwaiting') : countdown(w.reset_at) }}</p>
+                  <p class="font-medium text-primary-700 dark:text-primary-300">{{ windowEnded(w) ? t('userCarpool.windowAwaiting') : !w.reset_at && g.last_sync_at ? t('userCarpool.resetUnavailable') : countdown(w.reset_at) }}</p>
                   <p class="text-gray-500 dark:text-gray-400">{{ t(windowEnded(w) ? 'userCarpool.windowEnd' : 'userCarpool.nextReset') }}：{{ date(w.reset_at) }}</p>
                   <p v-if="w.start_at" class="text-gray-400 dark:text-gray-500">{{ t('userCarpool.windowStart') }}：{{ date(w.start_at) }}</p>
                 </div>
@@ -133,7 +133,7 @@ const allocation = (g: MyCarpool, value?: number) => g.allocation_ready ? money(
 const self = (g: MyCarpool) => g.members.find(m => m.is_self)
 const fullNumber = (value?: number) => value === undefined ? '—' : value.toLocaleString('en-US')
 const compact = (value?: number) => value === undefined ? '—' : new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
-const windows = (g: MyCarpool): CarpoolUsageWindow[] => ['5h', '7d'].map(window => g.windows?.find(w => w.window === window) ?? { window: window as '5h' | '7d', official_used_percent: null, start_at: null, reset_at: null, stats: null })
+const windows = (g: MyCarpool): CarpoolUsageWindow[] => ['5h', '7d'].map(window => g.windows?.find(w => w.window === window) ?? { window: window as '5h' | '7d', range_source: 'recent', official_used_percent: null, start_at: null, reset_at: null, stats: null })
 const windowEnded = (w: CarpoolUsageWindow) => !!w.reset_at && Date.parse(w.reset_at) <= now.value
 const date = (value: string | null) => value ? new Date(value).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US') : '—'
 function status(g: MyCarpool): MyCarpool['status'] {

@@ -12,6 +12,7 @@ export default {
     samplingHint: 'Collecting dollar-capacity samples. Currently applied allowances remain available and will adjust when enough samples exist.',
     syncResetHint: 'Upstream reset synchronization is enabled. Weekly usage updates after a new upstream window is confirmed.',
     localResetHint: 'This carpool uses the site’s ordinary weekly reset rules. The upstream countdown above is for reference only.',
+    recentWindow: 'Last {window} · Site records', resetUnavailable: 'Upstream reset time is currently unavailable',
     myWindows: 'My window usage', windowScope: 'Only my requests through this carpool on this site',
     windows: { '5h': '5 hours', '7d': '7 days' }, currentWindow: 'Current window', windowEnded: 'Previous window',
     requests: 'My requests', tokens: 'My tokens', tokensHint: 'Includes input, output, cache creation, and cache read tokens.',

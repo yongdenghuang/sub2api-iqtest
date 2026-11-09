@@ -11,6 +11,7 @@ export interface CarpoolMember {
 
 export interface CarpoolUsageWindow {
   window: '5h' | '7d'
+  range_source: 'official' | 'recent'
   official_used_percent: number | null
   start_at: string | null
   reset_at: string | null

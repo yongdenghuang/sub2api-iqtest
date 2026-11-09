@@ -29,10 +29,17 @@ func TestOfficialWindowSnapshotsMatchDurationAndRejectInvalidReadings(t *testing
 	five.UsedPercent = 0
 	five.ResetAt = now.Add(-time.Minute).Unix()
 	require.Len(t, officialWindows(usage, now), 2, "retain recently ended windows until an official update")
-	for _, reset := range []int64{0, now.Add(-6 * time.Hour).Unix(), now.Add(6 * time.Hour).Unix()} {
+	for _, reset := range []int64{0, now.Add(-6 * time.Hour).Unix()} {
 		five.ResetAt = reset
-		require.Len(t, officialWindows(usage, now), 1)
+		windows := officialWindows(usage, now)
+		require.Len(t, windows, 2)
+		require.True(t, windows[0].ResetAt.IsZero())
+		require.Zero(t, windows[0].UsedPercent)
 	}
+	five.ResetAt = now.Add(6 * time.Hour).Unix()
+	require.Len(t, officialWindows(usage, now), 1)
+	five.ResetAt, five.ResetAfterSeconds = 0, 3600
+	require.Equal(t, now.Add(time.Hour), officialWindows(usage, now)[0].ResetAt)
 	usage.RateLimit.SecondaryWindow = nil
 	require.Len(t, officialWindows(usage, now), 1, "missing five-hour data must not use the weekly reading")
 	require.Empty(t, officialWindows(nil, now))

@@ -12,6 +12,7 @@ export default {
     samplingHint: '美元额度采样中，暂按当前已生效额度使用，样本足够后自动调整。',
     syncResetHint: '已开启同步官方重置，确认官方新周期后更新本车周用量。',
     localResetHint: '本车采用本站原有按周重置规则；上方官方倒计时仅供参考。',
+    recentWindow: '最近 {window} · 本站记录', resetUnavailable: '官方暂未提供重置时间',
     myWindows: '我的窗口用量', windowScope: '仅统计我在本车的本站请求',
     windows: { '5h': '5 小时', '7d': '7 天' }, currentWindow: '本窗口累计', windowEnded: '上一窗口',
     requests: '我的请求数', tokens: '我的 Token 数', tokensHint: '包含输入、输出、缓存写入和缓存读取 Token。',

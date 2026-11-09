@@ -12,8 +12,8 @@ const sample: MyCarpool = {
   estimated: false, upstream_capacity_usd: null, official_used_percent: 25,
   last_sync_at: '2026-11-08T10:00:00Z', next_reset_at: '2026-11-14T10:00:00Z', status: 'sampling',
   windows: [
-    { window: '5h', official_used_percent: 12, start_at: '2026-11-08T08:00:00Z', reset_at: '2026-11-08T13:00:00Z', stats: { requests: 2200, tokens: 271700000, account_cost_usd: 57.75, user_cost_usd: 28.88 } },
-    { window: '7d', official_used_percent: 25, start_at: '2026-11-07T10:00:00Z', reset_at: '2026-11-14T10:00:00Z', stats: { requests: 3500, tokens: 400000000, account_cost_usd: 128.49, user_cost_usd: 64.25 } }
+    { window: '5h', range_source: 'official', official_used_percent: 12, start_at: '2026-11-08T08:00:00Z', reset_at: '2026-11-08T13:00:00Z', stats: { requests: 2200, tokens: 271700000, account_cost_usd: 57.75, user_cost_usd: 28.88 } },
+    { window: '7d', range_source: 'official', official_used_percent: 25, start_at: '2026-11-07T10:00:00Z', reset_at: '2026-11-14T10:00:00Z', stats: { requests: 3500, tokens: 400000000, account_cost_usd: 128.49, user_cost_usd: 64.25 } }
   ],
   // A stale older server response must not make the UI render other members.
   members: [1, 2, 3, 4].map(number => ({ number, name: number === 4 ? '' : `member${number}`, is_self: number === 2, allocated_usd: 600, used_usd: 100, remaining_usd: 500 }))
@@ -126,6 +126,17 @@ describe('member shared quota overview', () => {
     expect(w.text()).not.toContain('271.7M')
     expect(w.text()).not.toContain('member2')
     if (loss === 'removed') expect(w.find('section').exists()).toBe(false)
+  })
+  it('shows recent personal usage when upstream provides no active five-hour window', async () => {
+    vi.mocked(getMyCarpools).mockResolvedValue([{ ...sample, windows: [{ ...sample.windows[0], range_source: 'recent', reset_at: null, official_used_percent: null }, sample.windows[1]] }])
+    const w = setup(); await flushPromises()
+    const five = w.get('[data-window="5h"]')
+    expect(five.text()).toContain('最近 5 小时 · 本站记录')
+    expect(five.text()).toContain('2.2K')
+    expect(five.text()).toContain('$28.88')
+    expect(five.text()).toContain('官方暂未提供重置时间')
+    expect(five.text()).not.toContain('已用 0%')
+    expect(w.get('[data-window="7d"]').text()).toContain('本窗口累计')
   })
   it('labels ended windows without pretending their usage has reset', async () => {
     vi.mocked(getMyCarpools).mockResolvedValue([{ ...sample, windows: [{ ...sample.windows[0], start_at: '2026-11-08T05:00:00Z', reset_at: '2026-11-08T10:00:15Z' }, sample.windows[1]] }])

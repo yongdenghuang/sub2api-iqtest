@@ -52,6 +52,7 @@ func testPersonalWindowUsage(t *testing.T, s *Service) {
 	require.Len(t, windows, 2)
 	require.Equal(t, &MemberWindowStats{Requests: 2, Tokens: 107, AccountCostUSD: 11, UserCostUSD: 3.5}, windows[0].Stats)
 	require.Equal(t, &MemberWindowStats{Requests: 4, Tokens: 138, AccountCostUSD: 25, UserCostUSD: 6.5}, windows[1].Stats)
+	require.Equal(t, "official", windows[0].RangeSource)
 	require.Equal(t, 12.0, *windows[0].OfficialUsedPercent)
 	require.Equal(t, 25.0, *windows[1].OfficialUsedPercent)
 	require.Len(t, mine[0].Members, 1)
@@ -59,23 +60,30 @@ func testPersonalWindowUsage(t *testing.T, s *Service) {
 	other, err := s.ListForMember(ctx, 3)
 	require.NoError(t, err)
 	require.Equal(t, &MemberWindowStats{}, other[0].Windows[0].Stats, "a member with no logs sees their own zero, not car-wide traffic")
-	// An ended window includes only its actual interval, never later requests.
+	// An ended official window falls back to recent local traffic, clearly labeled.
 	st.Windows[0].ResetAt = now.Add(-time.Hour)
 	put()
 	mine, err = s.ListForMember(ctx, 1)
 	require.NoError(t, err)
-	require.Equal(t, &MemberWindowStats{Requests: 1, Tokens: 7, AccountCostUSD: 1, UserCostUSD: 0.5}, mine[0].Windows[0].Stats, "end boundary is exclusive")
+	require.Equal(t, "recent", mine[0].Windows[0].RangeSource)
+	require.Equal(t, &MemberWindowStats{Requests: 2, Tokens: 107, AccountCostUSD: 11, UserCostUSD: 3.5}, mine[0].Windows[0].Stats)
+	bounded, err := readMemberWindowStats(ctx, s.db, 1, 1, now.Add(-5*time.Hour), now.Add(-time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, &MemberWindowStats{Requests: 1, Tokens: 7, AccountCostUSD: 1, UserCostUSD: 0.5}, bounded, "end boundary is exclusive")
 	// A pre-upgrade snapshot preserves the weekly view, not a fabricated 5h one.
 	st.Windows = nil
 	put()
 	mine, err = s.ListForMember(ctx, 1)
 	require.NoError(t, err)
-	require.Nil(t, mine[0].Windows[0].Stats)
+	require.NotNil(t, mine[0].Windows[0].Stats)
+	require.Equal(t, "recent", mine[0].Windows[0].RangeSource)
 	require.Nil(t, mine[0].Windows[0].OfficialUsedPercent)
 	require.NotNil(t, mine[0].Windows[1].Stats)
 	st.ResetAt, st.CheckedAt = time.Time{}, time.Time{}
 	put()
 	mine, err = s.ListForMember(ctx, 1)
 	require.NoError(t, err)
-	require.Nil(t, mine[0].Windows[1].Stats, "unknown data must not be displayed as zero")
+	require.NotNil(t, mine[0].Windows[1].Stats, "local usage remains available without an official window")
+	require.Equal(t, "recent", mine[0].Windows[1].RangeSource)
+	require.Nil(t, mine[0].Windows[1].OfficialUsedPercent, "unknown official quota must not be displayed as zero")
 }
