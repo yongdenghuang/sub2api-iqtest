@@ -1,7 +1,6 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <CarpoolOverview v-if="!authStore.isSimpleMode" hide-empty />
       <div v-if="loading" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
       <template v-else-if="stats">
         <UserDashboardStats :stats="stats" :balance="user?.balance || 0" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
@@ -23,7 +22,6 @@ import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardR
 import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
 import { getMyPlatformQuotas } from '@/api/user'
 import { formatDateLocalInput } from '@/utils/format'
-import CarpoolOverview from '@/components/user/carpool/CarpoolOverview.vue'
 
 const authStore = useAuthStore(); const user = computed(() => authStore.user)
 const stats = ref<UserStatsType | null>(null); const loading = ref(false); const loadingUsage = ref(false); const loadingCharts = ref(false)
