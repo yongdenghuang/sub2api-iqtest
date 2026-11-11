@@ -12,7 +12,7 @@ const group: CarpoolGroup = {
   state: { percent: 25, checked_at: '2026-11-08T10:00:00Z', reset_at: '2026-11-14T10:00:00Z', estimated: false },
   members: [{ id: 1, user_id: 4, name: 'Member', usage: 100 }]
 }
-const setup = () => mount(CarpoolView, { global: { plugins: [createI18n({ legacy: false, locale: 'zh', messages: { zh } })], stubs: { AppLayout: { template: '<div><slot /></div>' } } } })
+const setup = () => mount(CarpoolView, { global: { plugins: [createI18n({ legacy: false, locale: 'zh', messages: { zh } })], stubs: { teleport: true, AppLayout: { template: '<div><slot /></div>' } } } })
 
 beforeEach(() => { vi.useFakeTimers(); vi.resetAllMocks(); vi.mocked(carpoolApi.list).mockResolvedValue(structuredClone([group])) })
 afterEach(() => { vi.useRealTimers() })
@@ -65,6 +65,61 @@ describe('shared subscription quota controls', () => {
     await wrapper.get('select').setValue('auto')
     expect(wrapper.get('input[type="number"]').attributes('disabled')).toBeUndefined()
     expect(wrapper.text()).toContain('直接使用 Codex')
+    wrapper.unmount()
+  })
+
+  it('confirms the exact old/new source and preserves edits when cancelling', async () => {
+    const changed = { ...structuredClone(group), account_id: 19, account_name: 'New source', bound_account_id: 2, bound_account_name: 'Old source', binding_changed: true, state: { ...group.state, estimated: true } }
+    vi.mocked(carpoolApi.list).mockResolvedValue([changed])
+    const wrapper = setup(); await flushPromises()
+    expect(wrapper.get('input[type="number"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('input[type="number"]').setValue(3200)
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(carpoolApi.save).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="dialog"]').text()).toContain('Old source #2 → New source #19')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('$3200.00')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('不清零已用额度')
+    const polls = vi.mocked(carpoolApi.list).mock.calls.length
+    await vi.advanceTimersByTimeAsync(30000); await flushPromises()
+    expect(carpoolApi.list).toHaveBeenCalledTimes(polls)
+    await wrapper.get('[role="dialog"]').findAll('button').find(b => b.text() === '取消')!.trigger('click')
+    expect(carpoolApi.save).not.toHaveBeenCalled()
+    expect((wrapper.get('input[type="number"]').element as HTMLInputElement).value).toBe('3200')
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    const confirm = wrapper.get('[role="dialog"]').findAll('button').find(b => b.text() === '确认覆盖绑定')!
+    await confirm.trigger('click'); await flushPromises()
+    expect(carpoolApi.save).toHaveBeenCalledTimes(1)
+    expect(carpoolApi.save).toHaveBeenCalledWith(12, { ...group.config, initial_total_usd: 3200, replace_upstream: { previous_account_id: 2, account_id: 19 } })
+    expect(wrapper.get('[role="status"]').text()).toContain('已覆盖上游绑定')
+    wrapper.unmount()
+  })
+  it('requires a new confirmation if the binding changed again on the server', async () => {
+    vi.mocked(carpoolApi.list).mockResolvedValue([{ ...structuredClone(group), account_id: 19, bound_account_id: 2, binding_changed: true }])
+    vi.mocked(carpoolApi.save).mockRejectedValue({ status: 409, reason: 'CARPOOL_BINDING_CHANGED', message: '请刷新并确认覆盖绑定' })
+    const wrapper = setup(); await flushPromises()
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    vi.mocked(carpoolApi.list).mockResolvedValue([{ ...structuredClone(group), account_id: 20, bound_account_id: 2, binding_changed: true }])
+    await wrapper.get('[role="dialog"]').findAll('button').find(b => b.text() === '确认覆盖绑定')!.trigger('click'); await flushPromises()
+    expect(carpoolApi.save).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[role="alert"]').text()).toContain('请刷新')
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(wrapper.get('[role="dialog"]').text()).toContain('#20')
+    wrapper.unmount()
+  })
+  it('confirms before syncing a replaced source and allows disabling without confirmation', async () => {
+    vi.mocked(carpoolApi.list).mockResolvedValue([{ ...structuredClone(group), account_id: 19, bound_account_id: 2, binding_changed: true }])
+    const wrapper = setup(); await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === '立即同步')!.trigger('click'); await flushPromises()
+    expect(carpoolApi.sync).not.toHaveBeenCalled()
+    await wrapper.get('[role="dialog"]').findAll('button').find(b => b.text() === '确认覆盖绑定')!.trigger('click'); await flushPromises()
+    expect(carpoolApi.save).toHaveBeenCalledWith(12, { ...group.config, replace_upstream: { previous_account_id: 2, account_id: 19 } })
+    expect(carpoolApi.sync).toHaveBeenCalledWith(12)
+    await wrapper.get('input[type="checkbox"]').setValue(false)
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(carpoolApi.save).toHaveBeenLastCalledWith(12, { ...group.config, enabled: false })
     wrapper.unmount()
   })
   it('reports a failed manual sync without claiming success', async () => {

@@ -32,6 +32,16 @@ export default {
     }
   },
   carpool: {
+    bindingPending: '待确认换绑',
+    bindingChanged: '检测到上游从 {old} 切换为 {next}。请保存设置并确认覆盖绑定，之后继续同步；无需新建分组。',
+    replaceTitle: '覆盖当前分组的上游绑定？',
+    replaceMessage: '沿用这个分组和现有车友，把拼车额度同步改为新上游账号。',
+    replaceUsage: '保留车友已用额度、订阅和历史账单；旧账号采样与绑定信息会存入调整记录。取消不会修改拼车额度绑定。',
+    replaceManual: '按本次设置保留手动额度：每人每周 {amount}。',
+    replaceAuto: '清除旧账号估值，从初始总额度 {amount} 重新采样和均分。',
+    replaceReset: '切换时不清零已用额度；从新账号下一次确认的官方周重置起同步重置。',
+    replaceConfirm: '确认覆盖绑定', replaceCancel: '取消', replaceEvent: '覆盖上游绑定',
+    replaced: '已覆盖上游绑定，分组和已用额度保留，将在一分钟内同步新账号。',
     title: '拼车额度', description: '手动设定或动态均分，官方重置可独立同步。',
     explanation: '直接登录 Codex 使用账号时，建议选择手动额度。官方用量仍每分钟查询，但不会覆盖你设置的每人周上限。',
     scope: '适用于单个 OpenAI OAuth 上游的订阅分组。只调整分组周限额，不修改钱包余额，也不使用重置卡。',

@@ -2,7 +2,6 @@ package carpool
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,24 @@ const (
 	AllocationAuto   = "auto"
 	AllocationManual = "manual"
 )
+
+// A confirmation applies only to the exact old/new pair shown to the admin.
+// It is a command, never a persisted setting or a blanket opt-in.
+type UpstreamReplacement struct {
+	PreviousAccountID int64 `json:"previous_account_id"`
+	AccountID         int64 `json:"account_id"`
+}
+
+type SaveRequest struct {
+	Config
+	ReplaceUpstream *UpstreamReplacement `json:"replace_upstream,omitempty"`
+}
+
+type BindingConflict struct{}
+
+func (*BindingConflict) Error() string {
+	return "上游绑定已变化，请刷新并确认覆盖绑定；分组和已用额度会保留"
+}
 
 func (c Config) automaticAllocation() bool { return c.AllocationMode != AllocationManual }
 func (c Config) syncOfficialReset() bool {
@@ -58,6 +75,11 @@ func validBudget(v float64) bool { return finite(v) && v >= 1 && v <= 1000000 }
 // resetting any subscriber's spent quota/window. Sync only observes the group
 // cap in manual mode, so edits from native group management remain effective.
 func (s *Service) Save(ctx context.Context, id int64, cfg Config) error {
+	return s.save(ctx, id, SaveRequest{Config: cfg})
+}
+
+func (s *Service) save(ctx context.Context, id int64, req SaveRequest) error {
+	cfg := req.Config
 	conn, release, err := s.lock(ctx, id)
 	if err != nil {
 		return err
@@ -94,15 +116,20 @@ func (s *Service) Save(ctx context.Context, id int64, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	var previousAccount int64
-	err = tx.QueryRowContext(ctx, "SELECT account_id FROM carpool_groups WHERE group_id=$1", id).Scan(&previousAccount)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
+	rebinding := g.BoundAccountID > 0 && g.BoundAccountID != g.AccountID
+	if rebinding && (req.ReplaceUpstream == nil || req.ReplaceUpstream.PreviousAccountID != g.BoundAccountID || req.ReplaceUpstream.AccountID != g.AccountID) {
+		return &BindingConflict{}
 	}
-	if previousAccount > 0 && previousAccount != g.AccountID {
-		return errors.New("上游绑定已变化，需新建独立订阅分组以保留原周期记录")
+	// Replayed confirmations after a successful replacement must not erase the
+	// newly collected samples or overwrite newer settings.
+	if !rebinding && req.ReplaceUpstream != nil {
+		return &BindingConflict{}
 	}
 	st, afterLimit, kind := g.State, g.WeeklyLimit, "config"
+	if rebinding {
+		st = State{KeepUsageUntilReset: true, Members: len(g.Members), PerMemberUSD: afterLimit,
+			Message: "已覆盖上游绑定，保留已用额度，等待新账号首次同步"}
+	}
 	if !cfg.automaticAllocation() {
 		afterLimit, kind = cfg.ManualWeeklyUSD, "manual_limit"
 		if _, err = tx.ExecContext(ctx, "UPDATE groups SET weekly_limit_usd=$2,updated_at=now() WHERE id=$1", id, afterLimit); err != nil {
@@ -120,19 +147,28 @@ func (s *Service) Save(ctx context.Context, id int64, cfg Config) error {
 			st.Message = "已开启动态均分，等待新的官方用量样本"
 		}
 	}
+	if rebinding {
+		kind = "upstream_replaced"
+	}
 	data, err := json.Marshal(st)
 	if err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO carpool_groups(group_id,account_id,enabled,initial_total_usd,allocation_mode,sync_official_reset,state)
- VALUES($1,$2,true,$3,$4,$5,$6) ON CONFLICT(group_id) DO UPDATE SET enabled=true,
+ VALUES($1,$2,true,$3,$4,$5,$6) ON CONFLICT(group_id) DO UPDATE SET enabled=true,account_id=excluded.account_id,
  initial_total_usd=excluded.initial_total_usd,allocation_mode=excluded.allocation_mode,
  sync_official_reset=excluded.sync_official_reset,state=excluded.state,updated_at=now()`,
 		id, g.AccountID, cfg.InitialTotalUSD, cfg.AllocationMode, cfg.syncOfficialReset(), data)
 	if err != nil {
 		return fmt.Errorf("保存失败；同一上游账号只能启用一个拼车额度池: %w", err)
 	}
-	detail, err := json.Marshal(map[string]any{"before_limit": g.WeeklyLimit, "after_limit": afterLimit, "before_config": g.Config, "after_config": cfg})
+	event := map[string]any{"before_limit": g.WeeklyLimit, "after_limit": afterLimit, "before_config": g.Config, "after_config": cfg}
+	if rebinding {
+		event["previous_account_id"], event["account_id"] = g.BoundAccountID, g.AccountID
+		event["previous_account_name"], event["account_name"] = g.BoundAccountName, g.AccountName
+		event["previous_state"] = g.State
+	}
+	detail, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}

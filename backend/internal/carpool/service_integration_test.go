@@ -105,6 +105,7 @@ func TestCarpoolPersistsScopedQuotasAndConfirmedResets(t *testing.T) {
 	t.Run("personal official-window usage", func(t *testing.T) { testPersonalWindowUsage(t, s) })
 	t.Run("native monitor membership visibility", func(t *testing.T) { testMonitorVisibility(t, s) })
 	t.Run("manual allowances and independent resets", func(t *testing.T) { testManualQuotaAndIndependentReset(t, db) })
+	t.Run("confirmed upstream replacement", func(t *testing.T) { testUpstreamReplacement(t, db) })
 
 	// A first sample starts now, so pre-existing logs cannot inflate capacity.
 	_, err = db.Exec(`INSERT INTO usage_logs(account_id,subscription_id,total_cost,actual_cost,created_at) VALUES(1,1,200,200,now())`)

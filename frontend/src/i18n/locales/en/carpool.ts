@@ -32,6 +32,16 @@ export default {
     }
   },
   carpool: {
+    bindingPending: 'Confirm source change',
+    bindingChanged: 'The source changed from {old} to {next}. Save and confirm replacing the binding to resume synchronization. A new group is not needed.',
+    replaceTitle: 'Replace this group’s upstream binding?',
+    replaceMessage: 'Keep this group and its subscribers, and use the new upstream account for quota synchronization.',
+    replaceUsage: 'Keep spent quota, subscriptions and billing history. Archive the previous source and samples in adjustment history. Cancel leaves the quota binding unchanged.',
+    replaceManual: 'Apply the selected manual allowance of {amount} per member per week.',
+    replaceAuto: 'Discard the old estimate and collect new samples, starting with a total allowance of {amount}.',
+    replaceReset: 'Switching does not clear spending. Reset synchronization starts at the new source’s next confirmed weekly reset.',
+    replaceConfirm: 'Confirm replacement', replaceCancel: 'Cancel', replaceEvent: 'Upstream binding replaced',
+    replaced: 'Source replaced. Group and spent quota retained. The new source will synchronize within a minute.',
     title: 'Shared quota', description: 'Manual or dynamic allowances, with independent upstream reset synchronization.',
     explanation: 'Use manual allowances when also signing directly into Codex. Upstream usage is still checked every minute, without overwriting your weekly cap.',
     scope: 'For subscription groups with one OpenAI OAuth source. Only the group weekly cap changes; wallets and reset credits are untouched.',

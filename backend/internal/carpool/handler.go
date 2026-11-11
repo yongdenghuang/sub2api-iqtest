@@ -2,6 +2,8 @@ package carpool
 
 import (
 	"encoding/json"
+	"errors"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -43,13 +45,13 @@ func (s *Service) RegisterRoutes(v1 *gin.RouterGroup, mw ...gin.HandlerFunc) {
 		if !ok {
 			return
 		}
-		var cfg Config
+		var cfg SaveRequest
 		if err := c.ShouldBindJSON(&cfg); err != nil {
 			response.BadRequest(c, "配置格式不正确")
 			return
 		}
-		if err := s.Save(c.Request.Context(), id, cfg); err != nil {
-			response.BadRequest(c, err.Error())
+		if err := s.save(c.Request.Context(), id, cfg); err != nil {
+			respondSaveError(c, err)
 			return
 		}
 		response.Success(c, gin.H{"saved": true})
@@ -60,7 +62,7 @@ func (s *Service) RegisterRoutes(v1 *gin.RouterGroup, mw ...gin.HandlerFunc) {
 			return
 		}
 		if err := s.Sync(c.Request.Context(), id); err != nil {
-			response.BadRequest(c, err.Error())
+			respondSaveError(c, err)
 			return
 		}
 		g, err := loadGroup(c.Request.Context(), s.db, id)
@@ -99,6 +101,15 @@ func (s *Service) RegisterRoutes(v1 *gin.RouterGroup, mw ...gin.HandlerFunc) {
 		}
 		response.Success(c, events)
 	})
+}
+
+func respondSaveError(c *gin.Context, err error) {
+	var conflict *BindingConflict
+	if errors.As(err, &conflict) {
+		response.ErrorWithDetails(c, http.StatusConflict, err.Error(), "CARPOOL_BINDING_CHANGED", nil)
+		return
+	}
+	response.BadRequest(c, err.Error())
 }
 
 func groupID(c *gin.Context) (int64, bool) {

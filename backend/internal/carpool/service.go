@@ -51,16 +51,19 @@ type Member struct {
 	Window *time.Time `json:"window"`
 }
 type Group struct {
-	ID           int64    `json:"id"`
-	Name         string   `json:"name"`
-	AccountID    int64    `json:"account_id"`
-	AccountName  string   `json:"account_name"`
-	AccountCount int      `json:"account_count"`
-	Eligible     bool     `json:"eligible"`
-	WeeklyLimit  float64  `json:"weekly_limit"`
-	Config       Config   `json:"config"`
-	State        State    `json:"state"`
-	Members      []Member `json:"members"`
+	ID               int64    `json:"id"`
+	Name             string   `json:"name"`
+	AccountID        int64    `json:"account_id"`
+	AccountName      string   `json:"account_name"`
+	BoundAccountID   int64    `json:"bound_account_id"`
+	BoundAccountName string   `json:"bound_account_name"`
+	BindingChanged   bool     `json:"binding_changed"`
+	AccountCount     int      `json:"account_count"`
+	Eligible         bool     `json:"eligible"`
+	WeeklyLimit      float64  `json:"weekly_limit"`
+	Config           Config   `json:"config"`
+	State            State    `json:"state"`
+	Members          []Member `json:"members"`
 }
 
 const schema = `CREATE TABLE IF NOT EXISTS carpool_groups (
@@ -223,9 +226,11 @@ func loadGroup(ctx context.Context, q querier, id int64) (Group, error) {
 	}
 	var data []byte
 	var syncReset bool
-	err = q.QueryRowContext(ctx, "SELECT enabled,initial_total_usd,allocation_mode,sync_official_reset,state FROM carpool_groups WHERE group_id=$1", id).Scan(&g.Config.Enabled, &g.Config.InitialTotalUSD, &g.Config.AllocationMode, &syncReset, &data)
+	err = q.QueryRowContext(ctx, `SELECT c.enabled,c.initial_total_usd,c.allocation_mode,c.sync_official_reset,c.state,c.account_id,a.name
+ FROM carpool_groups c JOIN accounts a ON a.id=c.account_id WHERE c.group_id=$1`, id).Scan(&g.Config.Enabled, &g.Config.InitialTotalUSD, &g.Config.AllocationMode, &syncReset, &data, &g.BoundAccountID, &g.BoundAccountName)
 	if err == nil {
 		g.Config.SyncOfficialReset = &syncReset
+		g.BindingChanged = g.AccountCount != 1 || g.AccountID != g.BoundAccountID
 	}
 	// The group's weekly cap is the single source of truth in manual mode.
 	// Native group edits must not be overwritten by a second stored copy.
@@ -340,7 +345,7 @@ func (s *Service) Sync(ctx context.Context, id int64) (retErr error) {
 		return err
 	}
 	if !g.Eligible || g.AccountCount != 1 || g.AccountID != bound {
-		return errors.New("上游账号绑定发生变化，已暂停自动调整")
+		return &BindingConflict{}
 	}
 	var active bool
 	if err = conn.QueryRowContext(ctx, "SELECT status='active' AND schedulable FROM accounts WHERE id=$1", bound).Scan(&active); err != nil {
@@ -426,9 +431,15 @@ func (s *Service) apply(ctx context.Context, conn *sql.Conn, observed Group, st 
 	before := append([]Member(nil), g.Members...)
 	memberUsage := make([]float64, 0, len(g.Members))
 	changed := resetChanged && g.Config.syncOfficialReset()
+	// A source switch is not a quota reset. Keep the old subscriber anchors
+	// until the NEW source confirms its next reset, so retained logs can still
+	// prove which carried charges belong to the old period at that point.
+	if changed {
+		st.KeepUsageUntilReset = false
+	}
 	for i := range g.Members {
 		m := &g.Members[i]
-		if g.Config.syncOfficialReset() && (m.Window == nil || !m.Window.Equal(start)) {
+		if g.Config.syncOfficialReset() && !st.KeepUsageUntilReset && (m.Window == nil || !m.Window.Equal(start)) {
 			// Subtract only old charges proven by retained request logs. Pending
 			// billing and post-reset requests remain in the counter; missing logs
 			// cannot accidentally grant extra quota. No wallet/history is altered.

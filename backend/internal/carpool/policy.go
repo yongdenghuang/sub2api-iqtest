@@ -20,20 +20,21 @@ type Observation struct {
 }
 
 type State struct {
-	ResetAt      time.Time        `json:"reset_at"`
-	CheckedAt    time.Time        `json:"checked_at"`
-	Percent      float64          `json:"percent"`
-	Capacity     float64          `json:"capacity"`
-	Estimated    bool             `json:"estimated"`
-	Baseline     Observation      `json:"baseline"`
-	Candidate    time.Time        `json:"candidate"`
-	CandidateAt  time.Time        `json:"candidate_at"`
-	DropAt       time.Time        `json:"drop_at"`
-	Message      string           `json:"message"`
-	LastError    string           `json:"last_error"`
-	Members      int              `json:"members"`
-	PerMemberUSD float64          `json:"per_member_usd"`
-	Windows      []OfficialWindow `json:"windows,omitempty"`
+	KeepUsageUntilReset bool             `json:"keep_usage_until_reset,omitempty"`
+	ResetAt             time.Time        `json:"reset_at"`
+	CheckedAt           time.Time        `json:"checked_at"`
+	Percent             float64          `json:"percent"`
+	Capacity            float64          `json:"capacity"`
+	Estimated           bool             `json:"estimated"`
+	Baseline            Observation      `json:"baseline"`
+	Candidate           time.Time        `json:"candidate"`
+	CandidateAt         time.Time        `json:"candidate_at"`
+	DropAt              time.Time        `json:"drop_at"`
+	Message             string           `json:"message"`
+	LastError           string           `json:"last_error"`
+	Members             int              `json:"members"`
+	PerMemberUSD        float64          `json:"per_member_usd"`
+	Windows             []OfficialWindow `json:"windows,omitempty"`
 }
 
 func weeklyObservation(usage *service.OpenAIQuotaUsage, now time.Time) (float64, time.Time, error) {

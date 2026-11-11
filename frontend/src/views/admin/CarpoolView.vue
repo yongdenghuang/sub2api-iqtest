@@ -22,22 +22,23 @@
             <h2 class="font-semibold text-gray-900 dark:text-white">{{ g.name }} <span class="text-xs font-normal text-gray-500">#{{ g.id }}</span></h2>
             <p class="mt-1 text-xs text-gray-500">{{ t('carpool.source') }} · {{ g.account_name || '—' }} <span v-if="g.account_id">#{{ g.account_id }}</span></p>
           </div>
-          <span class="badge" :class="!g.config.enabled ? 'badge-gray' : g.state.last_error ? 'badge-warning' : 'badge-success'">
-            {{ t(!g.config.enabled ? 'carpool.disabled' : g.state.last_error ? 'carpool.paused' : 'carpool.enabled') }}
+          <span class="badge" :class="!g.config.enabled ? 'badge-gray' : g.binding_changed || g.state.last_error ? 'badge-warning' : 'badge-success'">
+            {{ t(!g.config.enabled ? 'carpool.disabled' : g.binding_changed ? 'carpool.bindingPending' : g.state.last_error ? 'carpool.paused' : 'carpool.enabled') }}
           </span>
         </div>
         <div class="space-y-4 p-4">
+          <p v-if="g.binding_changed" class="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">{{ t('carpool.bindingChanged', { old: `${g.bound_account_name || ''} #${g.bound_account_id}`, next: `${g.account_name || '—'} #${g.account_id}` }) }}</p>
           <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <div><div class="text-xs text-gray-500">{{ t('carpool.members') }}</div><div class="mt-1 text-lg font-semibold">{{ g.members.length }} <span class="text-xs font-normal text-gray-500">{{ t(g.config.allocation_mode === 'manual' ? 'carpool.manual' : 'carpool.auto') }}</span></div></div>
             <div><div class="text-xs text-gray-500">{{ t('carpool.weekly') }}</div><div class="mt-1 text-lg font-semibold text-primary-600">{{ money(g.weekly_limit) }}</div></div>
-            <div><div class="text-xs text-gray-500">{{ t('carpool.used') }}</div><div class="mt-1 text-lg font-semibold">{{ validDate(g.state.checked_at) ? `${g.state.percent ?? 0}%` : '—' }}</div></div>
-            <div><div class="text-xs text-gray-500">{{ t(g.config.allocation_mode === 'manual' ? 'carpool.totalAllocation' : 'carpool.capacity') }}</div><div class="mt-1 text-lg font-semibold">{{ g.config.allocation_mode === 'manual' ? money(g.weekly_limit * g.members.length) : g.state.estimated ? money(g.state.capacity) : t('carpool.sampling') }}</div></div>
+            <div><div class="text-xs text-gray-500">{{ t('carpool.used') }}</div><div class="mt-1 text-lg font-semibold">{{ !g.binding_changed && validDate(g.state.checked_at) ? `${g.state.percent ?? 0}%` : '—' }}</div></div>
+            <div><div class="text-xs text-gray-500">{{ t(g.config.allocation_mode === 'manual' ? 'carpool.totalAllocation' : 'carpool.capacity') }}</div><div class="mt-1 text-lg font-semibold">{{ g.config.allocation_mode === 'manual' ? money(g.weekly_limit * g.members.length) : !g.binding_changed && g.state.estimated ? money(g.state.capacity) : t('carpool.sampling') }}</div></div>
           </div>
           <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
-            <span>{{ t('carpool.reset') }}：{{ date(g.state.reset_at) }}</span>
-            <span>{{ t('carpool.checked') }}：{{ date(g.state.checked_at) }}</span>
+            <span>{{ t('carpool.reset') }}：{{ g.binding_changed ? '—' : date(g.state.reset_at) }}</span>
+            <span>{{ t('carpool.checked') }}：{{ g.binding_changed ? '—' : date(g.state.checked_at) }}</span>
           </div>
-          <p v-if="g.config.enabled" class="rounded-lg bg-gray-50 p-3 text-sm dark:bg-dark-700" :class="g.state.last_error ? 'text-amber-700 dark:text-amber-300' : 'text-gray-600 dark:text-gray-300'">{{ g.state.last_error || g.state.message || t('carpool.waiting') }}</p>
+          <p v-if="g.config.enabled && !g.binding_changed" class="rounded-lg bg-gray-50 p-3 text-sm dark:bg-dark-700" :class="g.state.last_error ? 'text-amber-700 dark:text-amber-300' : 'text-gray-600 dark:text-gray-300'">{{ g.state.last_error || g.state.message || t('carpool.waiting') }}</p>
 
           <form v-if="drafts[g.id]" class="flex flex-wrap items-end gap-3 border-t border-gray-100 pt-4 dark:border-dark-700" @submit.prevent="save(g)">
             <label class="flex min-h-10 items-center gap-2 text-sm">
@@ -56,7 +57,7 @@
             </label>
             <label v-else class="text-xs text-gray-500">
               {{ t('carpool.seed') }}
-              <input v-model.number="drafts[g.id].initial_total_usd" type="number" min="1" max="1000000" step="0.01" class="input mt-1 w-48" :disabled="busy !== null || !drafts[g.id].enabled || (g.config.allocation_mode !== 'manual' && g.state.estimated)" :title="t('carpool.seedHint')" required />
+              <input v-model.number="drafts[g.id].initial_total_usd" type="number" min="1" max="1000000" step="0.01" class="input mt-1 w-48" :disabled="busy !== null || !drafts[g.id].enabled || (!g.binding_changed && g.config.allocation_mode !== 'manual' && g.state.estimated)" :title="t('carpool.seedHint')" required />
             </label>
             <label class="flex min-h-10 items-center gap-2 text-sm">
               <input v-model="drafts[g.id].sync_official_reset" type="checkbox" :disabled="busy !== null" />{{ t('carpool.syncReset') }}
@@ -85,7 +86,7 @@
             <div class="mt-2 overflow-x-auto">
               <table class="w-full text-left text-xs">
                 <thead class="text-gray-500"><tr><th class="py-2">{{ t('carpool.time') }}</th><th>{{ t('carpool.reason') }}</th><th>{{ t('carpool.before') }}</th><th>{{ t('carpool.after') }}</th></tr></thead>
-                <tbody><tr v-for="e in events[g.id] || []" :key="e.id" class="border-t border-gray-100 dark:border-dark-700"><td class="py-2">{{ date(e.created_at) }}</td><td>{{ t(eventLabel(e.kind)) }}</td><td>{{ money(e.detail.before_limit) }}</td><td>{{ money(e.detail.after_limit) }}</td></tr></tbody>
+                <tbody><tr v-for="e in events[g.id] || []" :key="e.id" class="border-t border-gray-100 dark:border-dark-700"><td class="py-2">{{ date(e.created_at) }}</td><td>{{ t(eventLabel(e.kind)) }}<span v-if="e.kind === 'upstream_replaced'"> · #{{ e.detail.previous_account_id }} → #{{ e.detail.account_id }}</span></td><td>{{ money(e.detail.before_limit) }}</td><td>{{ money(e.detail.after_limit) }}</td></tr></tbody>
               </table>
               <p v-if="events[g.id]?.length === 0" class="py-2 text-xs text-gray-500">{{ t('carpool.noEvents') }}</p>
             </div>
@@ -93,6 +94,15 @@
         </div>
       </section>
     </div>
+    <ConfirmDialog :show="replacement !== null" :title="t('carpool.replaceTitle')" :message="t('carpool.replaceMessage')" :confirm-text="t('carpool.replaceConfirm')" :cancel-text="t('carpool.replaceCancel')" @confirm="confirmReplacement" @cancel="replacement = null">
+      <div v-if="replacement" class="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+        <p class="font-medium">{{ replacement.group.name }} #{{ replacement.group.id }}</p>
+        <p>{{ replacement.group.bound_account_name }} #{{ replacement.group.bound_account_id }} → {{ replacement.group.account_name }} #{{ replacement.group.account_id }}</p>
+        <p>{{ t('carpool.replaceUsage') }}</p>
+        <p>{{ replacement.config.allocation_mode === 'manual' ? t('carpool.replaceManual', { amount: money(replacement.config.manual_weekly_usd) }) : t('carpool.replaceAuto', { amount: money(replacement.config.initial_total_usd) }) }}</p>
+        <p>{{ t(replacement.config.sync_official_reset ? 'carpool.replaceReset' : 'carpool.localResetHint') }}</p>
+      </div>
+    </ConfirmDialog>
   </AppLayout>
 </template>
 
@@ -100,6 +110,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { carpoolApi, type CarpoolConfig, type CarpoolEvent, type CarpoolGroup } from '@/api/admin/carpool'
 
 const { t } = useI18n()
@@ -110,11 +121,12 @@ const loading = ref(false)
 const busy = ref<number | null>(null)
 const error = ref('')
 const notice = ref('')
+const replacement = ref<{ group: CarpoolGroup; config: CarpoolConfig; syncAfter: boolean } | null>(null)
 let timer: ReturnType<typeof setInterval> | undefined
 const eligible = (g: CarpoolGroup) => g.eligible && g.account_count === 1 && g.account_id > 0 && g.members.length > 0
 const money = (value = 0) => `$${value.toFixed(2)}`
 const validDate = (value?: string) => !!value && !value.startsWith('0001-') && Number.isFinite(Date.parse(value))
-const eventLabels: Record<string, string> = { official_reset: 'carpool.officialReset', manual_limit: 'carpool.manualChange', config: 'carpool.configChange' }
+const eventLabels: Record<string, string> = { official_reset: 'carpool.officialReset', manual_limit: 'carpool.manualChange', config: 'carpool.configChange', upstream_replaced: 'carpool.replaceEvent' }
 const eventLabel = (kind: string) => eventLabels[kind] || 'carpool.adjust'
 const date = (value?: string) => validDate(value) ? new Date(value!).toLocaleString() : '—'
 function showError(e: unknown) {
@@ -132,15 +144,39 @@ async function refresh(resetID?: number) {
   } catch (e) { showError(e) } finally { loading.value = false }
 }
 async function save(g: CarpoolGroup) {
+  if (busy.value !== null || replacement.value) return
+  const config = { ...drafts.value[g.id] }
+  if (config.enabled && g.binding_changed) {
+    replacement.value = { group: { ...g }, config, syncAfter: false }
+    return
+  }
+  await saveConfig(g, config)
+}
+async function confirmReplacement() {
+  const pending = replacement.value
+  if (!pending || busy.value !== null) return
+  replacement.value = null
+  await saveConfig(pending.group, pending.config, true, pending.syncAfter)
+}
+async function saveConfig(g: CarpoolGroup, config: CarpoolConfig, replace = false, syncAfter = false) {
   busy.value = g.id; error.value = ''; notice.value = ''
   try {
-    await carpoolApi.save(g.id, { ...drafts.value[g.id] })
-    notice.value = t(drafts.value[g.id].enabled && drafts.value[g.id].allocation_mode === 'manual' ? 'carpool.manualSaved' : 'carpool.saved')
+    await carpoolApi.save(g.id, { ...config, ...(replace ? { replace_upstream: { previous_account_id: g.bound_account_id!, account_id: g.account_id } } : {}) })
+    notice.value = t(replace ? 'carpool.replaced' : config.enabled && config.allocation_mode === 'manual' ? 'carpool.manualSaved' : 'carpool.saved')
     if (events.value[g.id]) events.value[g.id] = await carpoolApi.events(g.id)
     await refresh(g.id)
-  } catch (e) { showError(e) } finally { busy.value = null }
+    if (syncAfter) {
+      await carpoolApi.sync(g.id)
+      await refresh()
+    }
+  } catch (e) { showError(e); await refresh() } finally { busy.value = null }
 }
 async function sync(g: CarpoolGroup) {
+  if (busy.value !== null || replacement.value) return
+  if (g.binding_changed) {
+    replacement.value = { group: { ...g }, config: { ...g.config }, syncAfter: true }
+    return
+  }
   busy.value = g.id; error.value = ''; notice.value = ''
   try {
     await carpoolApi.sync(g.id)
@@ -155,7 +191,7 @@ async function loadEvents(id: number, event: Event) {
 }
 onMounted(() => {
   void refresh()
-  timer = setInterval(() => { if (!document.hidden && busy.value === null) void refresh() }, 30000)
+  timer = setInterval(() => { if (!document.hidden && busy.value === null && !replacement.value) void refresh() }, 30000)
 })
 onUnmounted(() => { if (timer) clearInterval(timer) })
 </script>
