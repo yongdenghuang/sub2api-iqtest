@@ -4,7 +4,7 @@
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('iqtest.title') }}</h1>
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('iqtest.description') }}</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('iqtest.description') }} · {{ t('iqtest.result.timezone') }}</p>
         </div>
         <div class="flex items-center gap-2">
           <button type="button" class="btn btn-secondary" :disabled="loading" @click="refresh">
@@ -435,7 +435,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import { extractApiErrorMessage } from '@/utils/apiError'
-import { formatDateTime } from '@/utils/format'
+import { formatIQDateTime as formatDateTime } from './time'
 import iqtestAPI from '@/api/admin/iqtest'
 import type {
   IQCheckConfig,

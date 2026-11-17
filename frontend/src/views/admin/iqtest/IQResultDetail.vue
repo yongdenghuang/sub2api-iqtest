@@ -8,7 +8,7 @@
       <span v-if="review?.status === 'completed' && review.assessment" class="text-xs text-gray-500">{{ t('iqtest.visual.score') }}: {{ result.score ?? 0 }}</span>
     </div>
     <p class="text-xs font-medium text-gray-600 dark:text-gray-300" data-iq-model>{{ t('iqtest.result.model') }}：{{ result.model || t('iqtest.result.modelUnknown') }}</p>
-    <p class="text-xs text-gray-500">{{ formatDateTime(result.created_at) }} · #{{ result.id }}</p>
+    <p class="text-xs text-gray-500">{{ formatDateTime(result.created_at) }} {{ t('iqtest.result.timezone') }} · #{{ result.id }}</p>
     <p v-if="result.kind !== 'pelican_svg' && result.detail" class="whitespace-pre-wrap break-words text-gray-600 dark:text-gray-300">{{ result.detail }}</p>
     <div v-if="result.kind === 'pelican_svg'">
       <div class="input-label">{{ t('iqtest.result.svgPreview') }}</div>
@@ -58,7 +58,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { IQResult } from '@/api/admin/iqtest'
-import { formatDateTime } from '@/utils/format'
+import { formatIQDateTime as formatDateTime } from './time'
 import { resultClass, useIQLabels, visualReview, unreviewedSVG } from './labels'
 import { svgPreviewSource } from './svgPreview'
 

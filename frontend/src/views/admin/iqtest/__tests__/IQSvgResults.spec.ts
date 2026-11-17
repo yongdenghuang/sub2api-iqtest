@@ -16,7 +16,6 @@ vi.mock('vue-i18n', () => ({
     return typeof value === 'string' ? value : key
   } })
 }))
-vi.mock('@/utils/format', () => ({ formatDateTime: (value: string) => value }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError: vi.fn() }) }))
 vi.mock('@/api/admin/iqtest', () => ({ default: { listAccountResults: vi.fn(), getResult: vi.fn() } }))
 
@@ -38,6 +37,17 @@ beforeEach(() => {
 })
 
 describe('account SVG results', () => {
+  it.each(['candy', 'pelican_svg'] as const)('shows Beijing timestamps for %s history and details', kind => {
+    const item = { ...result(12), kind }
+    const history = mount(IQResultHistory, { props: { items: [item], selectedId: 12, loading: false } })
+    const detail = mount(IQResultDetail, { props: { result: item } })
+    expect(history.text()).toContain('时间（北京）')
+    expect(history.text()).toContain('2026/10/26 00:20:00')
+    expect(detail.text()).toContain('2026/10/26 00:20:00 北京时间（UTC+8）')
+    history.unmount()
+    detail.unmount()
+  })
+
   it('opens the latest real SVG from the account badge, then shows the exact historical row clicked', async () => {
     const wrapper = mount(IQAccountCell, { props: { states: [state] }, global: globalOptions })
     await wrapper.get('button').trigger('click')

@@ -49,7 +49,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { IQResult } from '@/api/admin/iqtest'
-import { formatDateTime } from '@/utils/format'
+import { formatIQDateTime as formatDateTime } from './time'
 import { resultClass, useIQLabels } from './labels'
 const props = defineProps<{ items: IQResult[]; selectedId: number | null; loading: boolean; recent?: boolean }>()
 const emit = defineEmits<{ select: [id: number] }>()

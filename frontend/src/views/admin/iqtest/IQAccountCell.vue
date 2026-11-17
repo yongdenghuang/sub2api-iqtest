@@ -32,7 +32,7 @@ import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
-import { formatDateTime } from '@/utils/format'
+import { formatIQDateTime as formatDateTime } from './time'
 import iqtestAPI from '@/api/admin/iqtest'
 import type { IQResult, IQStateRow } from '@/api/admin/iqtest'
 import IQResultListDialog from './IQResultListDialog.vue'
@@ -48,7 +48,7 @@ const { outcomeLabel, reasonLabel, accountStateLabel } = useIQLabels()
 function tooltip(s: IQStateRow) {
   const parts = [`${t('iqtest.column.last')}: ${outcomeLabel(s.last_outcome)}`]
   if (s.last_reason) parts.push(reasonLabel(s.last_reason))
-  parts.push(formatDateTime(s.updated_at))
+  parts.push(`${formatDateTime(s.updated_at)} ${t('iqtest.result.timezone')}`)
   return `${t(`iqtest.kind.${s.kind}`)} · ${parts.join(' · ')}`
 }
 
