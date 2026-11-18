@@ -4,7 +4,8 @@ export interface CodexModelsManifestResult {
   responseBytes: number
 }
 
-const DEFAULT_CODEX_CLIENT_VERSION = '0.158.0'
+// Downloaded catalogs should include models available to GPT-6.2-compatible clients.
+const DEFAULT_CODEX_CLIENT_VERSION = '0.166.0'
 
 function normalizeCodexBaseUrl(baseUrl: string): string {
   const fallback = typeof window !== 'undefined' ? window.location.origin : ''
