@@ -42,9 +42,25 @@ export interface CarpoolEvent {
   created_at: string
   detail: { before_limit: number; after_limit: number; state: CarpoolState; previous_account_id?: number; account_id?: number }
 }
+export interface CarpoolDirectPreview {
+  account_id: number
+  from: string
+  as_of: string
+  reset_at: string
+  percent: number
+  capacity: number
+  official: number
+  site: number
+  remaining: number
+  direct: number | null
+  suggested: number | null
+}
 export const carpoolApi = {
   async list(): Promise<CarpoolGroup[]> { return (await apiClient.get('/admin/carpool/groups')).data },
   async save(id: number, config: CarpoolSaveRequest): Promise<void> { await apiClient.put(`/admin/carpool/groups/${id}`, config) },
   async sync(id: number): Promise<CarpoolGroup> { return (await apiClient.post(`/admin/carpool/groups/${id}/sync`)).data },
+  async directPreview(id: number, capacity: number): Promise<CarpoolDirectPreview> {
+    return (await apiClient.get(`/admin/carpool/groups/${id}/direct-preview`, { params: { capacity } })).data
+  },
   async events(id: number): Promise<CarpoolEvent[]> { return (await apiClient.get(`/admin/carpool/groups/${id}/events`)).data }
 }

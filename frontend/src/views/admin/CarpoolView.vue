@@ -81,6 +81,30 @@
             </table>
           </div>
           <p class="text-xs text-gray-500">{{ t('carpool.fairHint') }}</p>
+          <section v-if="g.name === '四人车ujjw'" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+            <h3 class="text-sm font-semibold">{{ t('carpool.directPreview.title') }}</h3>
+            <p class="text-xs text-gray-500">{{ t('carpool.directPreview.hint') }}</p>
+            <form class="flex flex-wrap items-end gap-2" @submit.prevent="runDirectPreview(g.id)">
+              <label class="text-xs text-gray-500">
+                {{ t('carpool.directPreview.capacity') }}
+                <input v-model.number="previewCapacity" class="input mt-1 w-48" type="number" min="1" max="1000000" step="0.01" required />
+              </label>
+              <button class="btn btn-secondary" type="submit" :disabled="previewLoading">{{ t('carpool.directPreview.run') }}</button>
+            </form>
+            <p v-if="previewError" class="text-xs text-amber-700 dark:text-amber-300" role="alert">{{ previewError }}</p>
+            <template v-if="preview && !g.binding_changed && preview.account_id === g.account_id && preview.capacity === previewCapacity">
+              <p class="text-xs text-gray-500">
+                {{ t('carpool.directPreview.period', { from: date(preview.from), asOf: date(preview.as_of), reset: date(preview.reset_at) }) }}
+              </p>
+              <dl class="grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
+                <div><dt>{{ t('carpool.directPreview.official') }}</dt><dd>{{ money(preview.official) }} · {{ preview.percent }}%</dd></div>
+                <div><dt>{{ t('carpool.directPreview.site') }}</dt><dd>{{ money(preview.site) }}</dd></div>
+                <div><dt>{{ t('carpool.directPreview.direct') }}</dt><dd>{{ preview.direct === null ? '—' : money(preview.direct) }}</dd></div>
+                <div><dt>{{ t('carpool.directPreview.suggested') }}</dt><dd class="font-semibold text-primary-600">{{ preview.suggested === null ? '—' : money(preview.suggested) }}</dd></div>
+              </dl>
+              <p v-if="preview.direct === null" class="text-xs text-amber-700 dark:text-amber-300" role="status">{{ t('carpool.directPreview.mismatch') }}</p>
+            </template>
+          </section>
           <details @toggle="loadEvents(g.id, $event)">
             <summary class="cursor-pointer text-sm text-primary-600">{{ t('carpool.history') }}</summary>
             <div class="mt-2 overflow-x-auto">
@@ -111,7 +135,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import { carpoolApi, type CarpoolConfig, type CarpoolEvent, type CarpoolGroup } from '@/api/admin/carpool'
+import { carpoolApi, type CarpoolConfig, type CarpoolDirectPreview, type CarpoolEvent, type CarpoolGroup } from '@/api/admin/carpool'
 
 const { t } = useI18n()
 const groups = ref<CarpoolGroup[]>([])
@@ -121,6 +145,10 @@ const loading = ref(false)
 const busy = ref<number | null>(null)
 const error = ref('')
 const notice = ref('')
+const previewCapacity = ref<number | ''>('')
+const preview = ref<CarpoolDirectPreview | null>(null)
+const previewError = ref('')
+const previewLoading = ref(false)
 const replacement = ref<{ group: CarpoolGroup; config: CarpoolConfig; syncAfter: boolean } | null>(null)
 let timer: ReturnType<typeof setInterval> | undefined
 const eligible = (g: CarpoolGroup) => g.eligible && g.account_count === 1 && g.account_id > 0 && g.members.length > 0
@@ -132,6 +160,20 @@ const date = (value?: string) => validDate(value) ? new Date(value!).toLocaleStr
 function showError(e: unknown) {
   const detail = e as { response?: { data?: { message?: string } }; message?: string }
   error.value = detail.response?.data?.message || detail.message || t('carpool.error')
+}
+async function runDirectPreview(id: number) {
+  if (previewLoading.value || typeof previewCapacity.value !== 'number') return
+  previewLoading.value = true
+  preview.value = null
+  previewError.value = ''
+  try {
+    preview.value = await carpoolApi.directPreview(id, previewCapacity.value)
+  } catch (e: unknown) {
+    const detail = e as { response?: { data?: { message?: string } }; message?: string }
+    previewError.value = detail.response?.data?.message || detail.message || t('carpool.error')
+  } finally {
+    previewLoading.value = false
+  }
 }
 async function refresh(resetID?: number) {
   if (loading.value) return

@@ -64,6 +64,15 @@ export default {
     noEvents: '暂无调整记录', time: '时间', reason: '原因', before: '调整前 / 人', after: '调整后 / 人',
     adjust: '额度 / 人数调整', officialReset: '官方周窗口重置', error: '操作失败，请稍后重试。',
     disableHint: '停用后保留最后一次周上限，恢复原有按周重置规则。',
+    directPreview: {
+      title: '车主直登用量试算',
+      hint: '仅供参考，不修改车友额度。填写用纯站内流量校准的整周额度。按站内标准价换算，未记账的请求和官方上报延迟会影响估算。',
+      capacity: '整周额度换算基准（美元）', run: '按 4 人试算',
+      period: '官方周期起点 {from} · 采样 {asOf} · 下次重置 {reset}',
+      official: '官方已用（折算）', site: '该账号站内已用', direct: '车主站外已用（估算）',
+      suggested: '建议每人周上限（估算）',
+      mismatch: '站内已用超过官方折算量。请核对换算基准或等待官方用量更新后重试。'
+    },
     fairHint: '每人的周上限相同。上限降低时，已超额车友暂停新增使用；已用额度不会退回池中。',
     noMembers: '当前没有生效车友，自动调整已暂停。'
   }

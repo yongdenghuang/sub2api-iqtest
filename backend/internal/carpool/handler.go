@@ -40,6 +40,27 @@ func (s *Service) RegisterRoutes(v1 *gin.RouterGroup, mw ...gin.HandlerFunc) {
 		}
 		response.Success(c, rows)
 	})
+	g.GET("/groups/:id/direct-preview", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		id, ok := groupID(c)
+		if !ok {
+			return
+		}
+		capacity, err := strconv.ParseFloat(c.Query("capacity"), 64)
+		if err != nil || !validBudget(capacity) {
+			response.BadRequest(c, "请填写有效的整周额度换算基准")
+			return
+		}
+		preview, err := s.directPreview(c.Request.Context(), id, capacity)
+		switch {
+		case errors.Is(err, errDirectPreviewBinding), errors.Is(err, errDirectPreviewMembers), errors.Is(err, errDirectPreviewWindow):
+			response.BadRequest(c, err.Error())
+		case err != nil:
+			response.InternalError(c, "暂时无法读取拼车试算数据")
+		default:
+			response.Success(c, preview)
+		}
+	})
 	g.PUT("/groups/:id", func(c *gin.Context) {
 		id, ok := groupID(c)
 		if !ok {

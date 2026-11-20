@@ -64,6 +64,15 @@ export default {
     noEvents: 'No adjustments yet', time: 'Time', reason: 'Reason', before: 'Before / member', after: 'After / member',
     adjust: 'Capacity / membership change', officialReset: 'Upstream weekly reset', error: 'The operation failed. Please retry.',
     disableHint: 'Disabling keeps the last weekly cap and restores ordinary weekly resets.',
+    directPreview: {
+      title: 'Direct Codex usage preview',
+      hint: 'Preview only. Enter a weekly capacity calibrated using on-site traffic alone. Estimates use standard site prices and may include unlogged requests or reporting lag.',
+      capacity: 'Weekly capacity benchmark (USD)', run: 'Preview four-way split',
+      period: 'Official window start {from} · Sample {asOf} · Next reset {reset}',
+      official: 'Official usage (converted)', site: 'On-site account usage', direct: 'Owner’s off-site usage (estimate)',
+      suggested: 'Suggested weekly cap per person (estimate)',
+      mismatch: 'On-site usage exceeds converted official usage. Check the capacity estimate or wait for the next official update.'
+    },
     fairHint: 'Members have the same weekly cap. After a decrease, members already over their cap cannot spend more; spent quota is not returned to the pool.',
     noMembers: 'No active subscribers. Automatic adjustments are paused.'
   }
