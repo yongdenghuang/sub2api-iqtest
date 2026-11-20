@@ -103,7 +103,6 @@ func TestCarpoolPersistsScopedQuotasAndConfirmedResets(t *testing.T) {
 	require.NotZero(t, invalidator.subscriptions)
 	t.Run("member read access and privacy", func(t *testing.T) { testMemberViewAccess(t, s) })
 	t.Run("personal official-window usage", func(t *testing.T) { testPersonalWindowUsage(t, s) })
-	t.Run("read-only direct Codex preview", func(t *testing.T) { testDirectPreview(t, s) })
 	t.Run("native monitor membership visibility", func(t *testing.T) { testMonitorVisibility(t, s) })
 	t.Run("manual allowances and independent resets", func(t *testing.T) { testManualQuotaAndIndependentReset(t, db) })
 	t.Run("confirmed upstream replacement", func(t *testing.T) { testUpstreamReplacement(t, db) })
@@ -206,6 +205,9 @@ func TestCarpoolPersistsScopedQuotasAndConfirmedResets(t *testing.T) {
 	calls := q.calls
 	require.Error(t, s.Sync(ctx, 1))
 	require.Equal(t, calls, q.calls)
+
+	// Run last so the preview fixture cannot affect the pool-wide row counts above.
+	t.Run("read-only direct Codex preview", func(t *testing.T) { testDirectPreview(t, s) })
 }
 
 func testMemberViewAccess(t *testing.T, s *Service) {
